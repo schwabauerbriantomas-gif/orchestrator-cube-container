@@ -30,7 +30,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request, Response
@@ -209,7 +208,7 @@ def _get_keys() -> dict[str, ApiKey]:
             _save_keys(_keys)
             # Print the credential ONCE
             print(f"\n{'='*60}")
-            print(f"BOOTSTRAP ADMIN KEY (save this, shown once):")
+            print("BOOTSTRAP ADMIN KEY (save this, shown once):")
             print(f"  admin.{secret}")
             print(f"{'='*60}\n")
 

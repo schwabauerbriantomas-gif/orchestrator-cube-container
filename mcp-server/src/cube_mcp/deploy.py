@@ -6,15 +6,12 @@ restarts by writing code to git and mounting persistent volumes.
 from __future__ import annotations
 
 import os
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from .client import CubeAPIError, CubeContainerClient
 from .security import (
     sanitize_git_url_for_name,
-    validate_command,
     validate_git_url,
     validate_path_safe,
     validate_safe_name,
@@ -112,7 +109,6 @@ class DeployManager:
         The container mounts the volume at /app, so code survives restarts.
         On restart, the container re-pulls from git to get latest code.
         """
-        import asyncio
 
         # Validate git URL
         git_url = validate_git_url(git_url)
@@ -188,7 +184,6 @@ class DeployManager:
         After updating code on disk, the container needs a restart to
         pick up changes (or can use exec_in_sandbox to restart just the app).
         """
-        import asyncio
 
         # Validate
         git_url = validate_git_url(git_url)

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-import shlex
 from pathlib import Path
 
 # Allowed protocols for git clone
@@ -73,7 +72,7 @@ def validate_git_url(url: str) -> str:
     # Reject URLs with embedded credentials (user:pass@host)
     # https://user:pass@host/repo → block
     if "@" in url.split("://")[1].split("/")[0]:
-        raise ValueError(f"Git URL with embedded credentials is not allowed")
+        raise ValueError("Git URL with embedded credentials is not allowed")
 
     return url
 
@@ -90,7 +89,7 @@ def validate_command(cmd: str) -> str:
 
     for pattern in SHELL_BLACKLIST:
         if re.search(pattern, cmd, re.IGNORECASE):
-            raise ValueError(f"Command contains blacklisted pattern")
+            raise ValueError("Command contains blacklisted pattern")
 
     return cmd
 

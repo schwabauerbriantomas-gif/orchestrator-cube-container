@@ -464,7 +464,6 @@ async def run_http(port: int = 8080):
     """
     from starlette.applications import Starlette
     from starlette.routing import Mount
-    from starlette.middleware import Middleware
     from mcp.server.streamable_http import StreamableHTTPServerTransport
     import contextlib
 
