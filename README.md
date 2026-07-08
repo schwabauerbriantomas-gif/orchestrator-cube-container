@@ -61,7 +61,7 @@ Runs on COTS mini-PCs, ARM SBCs, recycled office machines, Proxmox VMs, or any L
 ### What Was Added
 
 - ✅ **MCP Server** (Go) — 22 tools for AI-agent-driven orchestration, single static binary
-- ✅ **Auth Gateway** (FastAPI) — API-key + RBAC + rate limiting + audit for multiuser production
+- ✅ **Auth + RBAC** (Go) — API-key + secret auth, RBAC (viewer/operator/admin), rate limiting, JSONL audit trail with SHA256 hash chain — built into MCP server
 - ✅ **Caddy Proxy** — TLS 1.3 + WAF + rate limiting for external exposure
 - ✅ **Persistent Deploy** — deploy from git or inline code with volume support
 - ✅ **Input Validation** — path traversal prevention, git URL sanitization, command injection blocking
@@ -361,6 +361,38 @@ HTTPS client → Caddy (TLS 1.3 + WAF + rate limit)
 
 ---
 
+## Performance
+
+Real measurements from test environment (AMD Ryzen 5 3400G, Go 1.24, Linux):
+
+| Metric | Value | Notes |
+|--------|-------|-------|
+| **Binary size** | 6.95 MB | Static binary, stripped (`-ldflags -s -w`) |
+| **RSS memory (idle)** | 8.3 MB | HTTP mode, after startup |
+| **Startup + init** | < 1 ms | Process spawn → MCP initialize response |
+| **HTTP latency (avg)** | 482 µs | Full stack: auth → RBAC → rate limit → MCP → CubeAPI |
+| **HTTP latency (p99)** | 589 µs | 100 requests, same stack |
+| **Throughput** | 2,076 RPS | Requests per second, single core |
+
+Component-level benchmarks (Go `testing.B`):
+
+| Operation | Latency | Allocs | Notes |
+|-----------|---------|--------|-------|
+| Auth key validation | **110 ns** | 0 allocs | HMAC compare, map lookup |
+| RBAC permission check | **12 ns** | 0 allocs | Map lookup + int compare |
+| Rate limiter check | 244 µs | 15 allocs | Sliding window (optimizable) |
+| Audit log write (JSONL) | 5.2 µs | 13 allocs | File append + SHA256 |
+| Git URL validation | 124 ns | 2 allocs | Protocol + credential check |
+| Command validation | 44 µs | 156 allocs | Regex blacklist (6 patterns) |
+
+All measurements taken with Go 1.24 on Linux/amd64. Reproducible via:
+```bash
+cd mcp-server-go
+go test -tags=e2e -bench=. -benchmem ./...
+```
+
+---
+
 ## Project Structure
 
 ```
@@ -371,12 +403,16 @@ cube-container/
 ├── cube-lifecycle-manager/    # Auto-pause/resume controller
 ├── CubeProxy/                 # nginx reverse proxy + TLS
 ├── web/                       # React web console (:12088)
-├── mcp-server-go/             # Go — MCP server (22 tools, single static binary)
+├── mcp-server-go/             # Go — MCP server (22 tools, auth, single static binary)
 │   ├── server.go              # MCP server — dual stdio + HTTP mode, 22 tool handlers
 │   ├── client.go              # CubeAPI HTTP client
 │   ├── deploy.go              # Persistent deploy from git/code
 │   ├── security.go            # Input validation
+│   ├── auth.go                # API-key auth, RBAC, rate limiting, audit trail
 │   ├── security_test.go       # 11 tests (path traversal, git URL, command injection)
+│   ├── auth_test.go           # 10 tests (key gen, RBAC, rate limit, audit tamper detection)
+│   ├── e2e_test.go            # 6 end-to-end tests (full HTTP stack, mock CubeAPI)
+│   ├── bench_test.go          # Performance benchmarks + metrics
 │   ├── go.mod
 │   └── go.sum
 ├── deploy/

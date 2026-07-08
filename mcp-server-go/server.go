@@ -3,12 +3,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -17,16 +21,59 @@ import (
 var (
 	client  *CubeClient
 	deploy  *DeployManager
+	keyStore *KeyStore
 	version = "1.0.0"
 )
 
 func main() {
 	mode := flag.String("mode", "stdio", "Server mode: stdio or http")
 	port := flag.Int("port", 8080, "HTTP port (only used in http mode)")
+	genKey := flag.String("gen-key", "", "Generate a new API key: viewer|operator|admin")
+	keyLabel := flag.String("label", "", "Label for generated key")
+	revokeKey := flag.String("revoke-key", "", "Revoke an API key by ID")
+	verifyAudit := flag.String("verify-audit", "", "Verify audit log integrity (path to .logl file)")
 	flag.Parse()
+
+	// Admin subcommands
+	if *genKey != "" {
+		keyStore := newKeyStore()
+		role := Role(*genKey)
+		if role != RoleViewer && role != RoleOperator && role != RoleAdmin {
+			fmt.Fprintf(os.Stderr, "invalid role: %s (use viewer, operator, or admin)\n", *genKey)
+			os.Exit(1)
+		}
+		k, err := keyStore.GenerateKey(role, *keyLabel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Key:    %s\n", k.Key)
+		fmt.Printf("Secret: %s\n", k.Secret)
+		fmt.Printf("Role:   %s\n", k.Role)
+		os.Exit(0)
+	}
+	if *revokeKey != "" {
+		keyStore := newKeyStore()
+		if err := keyStore.Revoke(*revokeKey); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("revoked")
+		os.Exit(0)
+	}
+	if *verifyAudit != "" {
+		count, err := VerifyAuditChain(*verifyAudit)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "FAIL: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("OK: %d entries verified\n", count)
+		os.Exit(0)
+	}
 
 	client = newCubeClient()
 	deploy = newDeployManager(client)
+	keyStore = newKeyStore()
 
 	s := server.NewMCPServer(
 		"cube-container-mcp",
@@ -45,8 +92,32 @@ func main() {
 		}
 	case "http":
 		fmt.Fprintf(os.Stderr, "[cube-mcp] HTTP mode on :%d → %s\n", *port, client.BaseURL)
+		limiter := newRateLimiter(120, time.Minute)
+		audit := newAuditLogger()
+		middleware := newAuthMiddleware(keyStore, limiter, audit)
+		adminAPI := &AuthAdminAPI{keys: keyStore}
+
+		// The MCP streamable HTTP server from mcp-go handles /mcp
 		httpServer := server.NewStreamableHTTPServer(s)
-		if err := httpServer.Start(fmt.Sprintf(":%d", *port)); err != nil {
+		mcpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			httpServer.ServeHTTP(w, r)
+		})
+
+		// Wrap MCP with auth (tool name extracted from JSON body for RBAC)
+		authedMCP := middleware.Wrap(mcpHandler, extractToolFromRequest)
+
+		mux := http.NewServeMux()
+		mux.Handle("/mcp", authedMCP)
+		mux.Handle("/auth/keys", adminAPI)        // POST: create, GET: list
+		mux.Handle("/auth/keys/", adminAPI)        // DELETE: revoke
+		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"status":"ok"}`))
+		})
+
+		addr := fmt.Sprintf(":%d", *port)
+		fmt.Fprintf(os.Stderr, "[cube-mcp] listening on %s\n", addr)
+		fmt.Fprintf(os.Stderr, "[cube-mcp] endpoints: POST /mcp, GET /health, POST /auth/keys\n")
+		if err := http.ListenAndServe(addr, mux); err != nil {
 			fmt.Fprintf(os.Stderr, "[cube-mcp] error: %v\n", err)
 			os.Exit(1)
 		}
@@ -54,6 +125,34 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown mode: %s (use stdio or http)\n", *mode)
 		os.Exit(1)
 	}
+}
+
+// extractToolFromRequest reads the JSON-RPC body to find the tool name.
+// This is needed for RBAC checks before the tool executes.
+func extractToolFromRequest(r *http.Request) string {
+	if r.Body == nil {
+		return ""
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return ""
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	var payload struct {
+		Method string `json:"method"`
+		Params struct {
+			Name      string `json:"name"`
+			Arguments map[string]interface{} `json:"arguments"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return ""
+	}
+	if payload.Method == "tools/call" {
+		return payload.Params.Name
+	}
+	return ""
 }
 
 // ---- Tool registration ----
