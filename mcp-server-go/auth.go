@@ -89,6 +89,13 @@ var toolPermissions = map[string]Role{
 	"backend_info": RoleViewer,
 	// High availability — read-only state
 	"ha_state": RoleViewer,
+	// Multi-node — admin to mutate, viewer to list/get, operator to deploy
+	"node_add":       RoleAdmin,
+	"node_update":    RoleAdmin,
+	"node_remove":    RoleAdmin,
+	"node_list":      RoleViewer,
+	"node_get":       RoleViewer,
+	"deploy_to_node": RoleOperator,
 	// Health checks — operator to configure/remove, viewer to list/status
 	"health_check_set":    RoleOperator,
 	"health_check_remove": RoleOperator,

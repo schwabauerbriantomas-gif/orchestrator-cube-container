@@ -43,16 +43,32 @@ func (c *DockerClient) Endpoint() string { return c.SocketPath }
 // The unix socket path and API version are configurable via environment.
 func newDockerClient() *DockerClient {
 	socket := envOr("DOCKER_SOCKET", "/var/run/docker.sock")
+	return newDockerClientWithTransport(socket, "unix")
+}
+
+// newDockerClientWithTransport creates a DockerClient that can talk to either
+// a local unix socket or a remote TCP endpoint.
+func newDockerClientWithTransport(address, transport string) *DockerClient {
+	var dialContext func(ctx context.Context, _, _ string) (net.Conn, error)
+	if transport == "tcp" {
+		d := net.Dialer{}
+		dialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// address is already host:port
+			return d.DialContext(ctx, "tcp", address)
+		}
+	} else {
+		d := net.Dialer{}
+		dialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return d.DialContext(ctx, "unix", address)
+		}
+	}
 	return &DockerClient{
-		SocketPath: socket,
+		SocketPath: address,
 		APIVersion: envOr("DOCKER_API_VERSION", "v1.44"),
 		HTTP: &http.Client{
 			Timeout: 60 * time.Second,
 			Transport: &http.Transport{
-				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-					d := net.Dialer{}
-					return d.DialContext(ctx, "unix", socket)
-				},
+				DialContext: dialContext,
 			},
 		},
 	}

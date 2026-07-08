@@ -88,6 +88,9 @@ func main() {
 	// Health check manager — runs probes and auto-restarts failed containers
 	healthMgr = newHealthManager(client)
 
+	// Multi-node registry — cluster catalog of physical machines
+	nodeRegistry = newNodeRegistry()
+
 	// Secrets manager (optional — degrades gracefully if key unavailable)
 	sm, err := newSecretsManager()
 	if err != nil {
@@ -396,6 +399,33 @@ func registerAllTools(s *server.MCPServer) {
 
 	// Backend introspection — lets the model know which runtime is active.
 	s.AddTool(tool("backend_info", "Get information about the active container backend (docker or cube). Returns backend name, endpoint, and capabilities. Use this to understand which container runtime the MCP server is operating on."), handleBackendInfo)
+
+	// --- Multi-node cluster management (6) ---
+	s.AddTool(toolWithArgs("node_add", "Register a new cluster node. Args: id (required, unique identifier), address (required, host:port), backend (docker or cube), hostname, memory_mb, cpu_cores, disk_gb, state (active/draining/offline, default active).",
+		mcp.WithString("id", mcp.Required(), mcp.Description("Unique node ID")),
+		mcp.WithString("address", mcp.Required(), mcp.Description("host:port for remote API access")),
+		mcp.WithString("backend", mcp.Description("docker or cube (default cube)")),
+		mcp.WithString("hostname", mcp.Description("Human-readable hostname")),
+		mcp.WithNumber("memory_mb", mcp.Description("Total RAM in MB")),
+		mcp.WithNumber("cpu_cores", mcp.Description("Total CPU cores")),
+		mcp.WithNumber("disk_gb", mcp.Description("Total disk in GB")),
+	), handleNodeAdd)
+	s.AddTool(toolWithArgs("node_update", "Update a registered node's properties (address, state, resources).",
+		mcp.WithString("id", mcp.Required()),
+	), handleNodeUpdate)
+	s.AddTool(toolWithArgs("node_remove", "Remove a node from the cluster registry. Containers on the node are NOT affected.",
+		mcp.WithString("id", mcp.Required()),
+	), handleNodeRemove)
+	s.AddTool(tool("node_list", "List all registered cluster nodes with state, resources, and backend type."), handleNodeList)
+	s.AddTool(toolWithArgs("node_get", "Get detailed information about a specific node.",
+		mcp.WithString("id", mcp.Required()),
+	), handleNodeGet)
+	s.AddTool(toolWithArgs("deploy_to_node", "Deploy a container to a specific remote node. Creates a remote backend connection to the node and runs the container there. Use suggest_node first to pick the best node.",
+		mcp.WithString("node_id", mcp.Required()),
+		mcp.WithString("template_id", mcp.Required()),
+		mcp.WithNumber("memory_mb", mcp.Description("Memory limit in MB (default 512)")),
+		mcp.WithNumber("cpu_count", mcp.Description("CPU cores (default 1.0)")),
+	), handleDeployToNode)
 
 	// --- High availability (1) ---
 	s.AddTool(tool("ha_state", "Get the current high-availability state of this CubeMaster node: role (active/standby), active node ID, peer health, and failover timing."), handleHAState)
