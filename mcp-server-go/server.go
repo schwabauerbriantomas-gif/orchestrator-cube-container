@@ -19,11 +19,13 @@ import (
 )
 
 var (
-	client   *CubeClient
-	deploy   *DeployManager
-	keyStore *KeyStore
-	backupMgr *BackupManager
-	version  = "1.0.0"
+	client          *CubeClient
+	deploy          *DeployManager
+	keyStore        *KeyStore
+	backupMgr       *BackupManager
+	metricsCollector *MetricsCollector
+	routeMgr        *RouteManager
+	version         = "1.0.0"
 )
 
 func main() {
@@ -76,6 +78,9 @@ func main() {
 	deploy = newDeployManager(client)
 	keyStore = newKeyStore()
 	backupMgr = newBackupManager(deploy, client)
+	metricsCollector = newMetricsCollector()
+	routeMgr = newRouteManager()
+	versionMgr = newVersionManager(deploy)
 
 	s := server.NewMCPServer(
 		"cube-container-mcp",
@@ -115,6 +120,9 @@ func main() {
 		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"status":"ok"}`))
 		})
+		mux.HandleFunc("/metrics", metricsHandler)
+		mux.HandleFunc("/webhook/git", handleGitWebhook)
+		mux.HandleFunc("/streams/", handleLogStream) // /streams/{container_id}/logs (SSE)
 
 		addr := fmt.Sprintf(":%d", *port)
 		fmt.Fprintf(os.Stderr, "[cube-mcp] listening on %s\n", addr)
@@ -152,6 +160,7 @@ func extractToolFromRequest(r *http.Request) string {
 		return ""
 	}
 	if payload.Method == "tools/call" {
+		metricsCollector.IncToolCall(payload.Params.Name)
 		return payload.Params.Name
 	}
 	return ""
@@ -168,6 +177,10 @@ func registerAllTools(s *server.MCPServer) {
 	s.AddTool(toolWithArgs("get_node", "Get detailed info for a specific node.",
 		mcp.WithString("node_id", mcp.Required(), mcp.Description("Node ID")),
 	), handleGetNode)
+	s.AddTool(toolWithArgs("suggest_node", "Suggest the best node for a new container based on resource availability. Returns top-3 candidates with bin-packing scores. Pass required memory_mb and cpu_count to filter.",
+		mcp.WithNumber("memory_mb", mcp.Description("Required memory in MB")),
+		mcp.WithNumber("cpu_count", mcp.Description("Required CPU cores")),
+	), handleSuggestNode)
 
 	// --- Container lifecycle (7) ---
 	s.AddTool(toolWithArgs("list_containers", "List running containers (sandboxes) with optional filters. Args: state (running/paused/stopped), limit (default 50).",
@@ -195,6 +208,10 @@ func registerAllTools(s *server.MCPServer) {
 		mcp.WithString("container_id", mcp.Required()),
 		mcp.WithNumber("limit", mcp.Description("Max log lines (default 100)")),
 	), handleGetContainerLogs)
+	s.AddTool(toolWithArgs("tail_container_logs", "Get the last N log lines from a container (one-shot). For real-time streaming use the SSE endpoint at GET /streams/{container_id}/logs.",
+		mcp.WithString("container_id", mcp.Required()),
+		mcp.WithNumber("limit", mcp.Description("Number of lines (default 50)")),
+	), handleTailLogs)
 
 	// --- Templates (3) ---
 	s.AddTool(tool("list_templates", "List all available container templates."), handleListTemplates)
@@ -251,6 +268,26 @@ func registerAllTools(s *server.MCPServer) {
 	s.AddTool(toolWithArgs("delete_backup", "Delete a backup file and its manifest permanently.",
 		mcp.WithString("backup_id", mcp.Required()),
 	), handleDeleteBackup)
+
+	// --- Deploy versioning & rollback (2) ---
+	s.AddTool(toolWithArgs("rollback_deploy", "Rollback a deployment to its previous version. Redeploys from the prior git commit.",
+		mcp.WithString("app_name", mcp.Required()),
+	), handleRollbackDeploy)
+	s.AddTool(toolWithArgs("list_deploy_versions", "List all deployment versions for an app.",
+		mcp.WithString("app_name", mcp.Required()),
+	), handleListVersions)
+
+	// --- Routing & automatic TLS (3) ---
+	s.AddTool(toolWithArgs("create_route", "Create a domain route with automatic TLS. Caddy obtains Let's Encrypt certificates automatically. The domain must point to this server's IP.",
+		mcp.WithString("domain", mcp.Required()),
+		mcp.WithString("container_id", mcp.Required()),
+		mcp.WithNumber("target_port", mcp.Required()),
+		mcp.WithString("path_prefix", mcp.Description("Optional path prefix, e.g. /api")),
+	), handleCreateRoute)
+	s.AddTool(toolWithArgs("delete_route", "Remove a domain route and its TLS certificate.",
+		mcp.WithString("domain", mcp.Required()),
+	), handleDeleteRoute)
+	s.AddTool(tool("list_routes", "List all configured domain routes with TLS status."), handleListRoutes)
 }
 
 // ---- Tool builders ----

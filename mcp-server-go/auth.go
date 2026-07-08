@@ -39,10 +39,12 @@ var toolPermissions = map[string]Role{
 	"cluster_versions":  RoleViewer,
 	"list_nodes":        RoleViewer,
 	"get_node":          RoleViewer,
+	"suggest_node":      RoleViewer,
 	"list_containers":   RoleViewer,
 	"get_container":     RoleViewer,
-	"get_container_logs": RoleViewer,
-	"list_templates":    RoleViewer,
+	"get_container_logs":  RoleViewer,
+	"tail_container_logs": RoleViewer,
+	"list_templates":      RoleViewer,
 	"get_template":      RoleViewer,
 	"list_volumes":      RoleViewer,
 	// Mutating — operator
@@ -64,6 +66,13 @@ var toolPermissions = map[string]Role{
 	"list_backups":      RoleViewer,
 	"restore_backup":    RoleAdmin,
 	"delete_backup":     RoleAdmin,
+	// Deploy versioning & rollback
+	"rollback_deploy":      RoleAdmin,
+	"list_deploy_versions": RoleViewer,
+	// Routing & automatic TLS — admin to mutate, viewer to list
+	"create_route": RoleAdmin,
+	"delete_route": RoleAdmin,
+	"list_routes":  RoleViewer,
 }
 
 // roleLevel returns a numeric level for comparison (higher = more permissions).
