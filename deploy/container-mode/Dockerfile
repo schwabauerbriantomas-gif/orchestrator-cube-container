@@ -37,7 +37,7 @@ FROM rust:1.77-bookworm AS rust-builder
 
 WORKDIR /workspace
 COPY CubeAPI/ ./CubeAPI/
-RUN cd CubeAPI && cargo build --release && cp target/release/cubeapi /cubeapi
+RUN cd CubeAPI && cargo build --release && cp target/release/cube-api /cubeapi
 
 # ---- Stage 3: Build MCP server ----
 FROM python:3.12-slim AS mcp-builder
