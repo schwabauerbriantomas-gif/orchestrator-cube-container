@@ -1,0 +1,37 @@
+name: AI Assistant
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned, labeled]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  claude-response:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 20
+          ref: ${{ github.sha }}
+
+      - uses: anthropics/claude-code-action@v1
+        env:
+            ANTHROPIC_BASE_URL: https://tokenhub.tencentmaas.com
+            ANTHROPIC_MODEL: deepseek-v4-flash-202605
+            ANTHROPIC_SMALL_FAST_MODEL: deepseek-v4-flash-202605
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          bot_name: "CubeBot"
+          # Optional: add custom trigger phrase (default: @claude)
+          trigger_phrase: "/cubebot"

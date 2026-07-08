@@ -1,0 +1,72 @@
+name: Claude Auto Review
+
+on:
+  # IMPORTANT: pull_request_target makes secrets available to fork PRs.
+  # SECURITY RULE: never add steps that EXECUTE code from the PR
+  # (no npm install / make / cargo build / pre-commit / etc.).
+  # Claude only READS files (safe), reads PR metadata, and posts review output
+  # through the constrained scripts/gh.sh wrapper below.
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head for review context
+        uses: actions/checkout@v6
+        with:
+          # Check out the PR's HEAD so Claude can read the post-change source
+          # for richer context. SAFE only because no step below executes it.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Strip the GITHUB_TOKEN from .git/config so even an accidental
+          # git push from a future step cannot use base-repo write creds.
+          persist-credentials: false
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CLAUDE_APP_ID }}
+          private-key: ${{ secrets.CLAUDE_APP_PRIVATE_KEY }}
+
+      - uses: anthropics/claude-code-action@v1
+        env:
+            ANTHROPIC_BASE_URL: https://tokenhub.tencentmaas.com
+            ANTHROPIC_MODEL: deepseek-v4-flash-202605
+            ANTHROPIC_SMALL_FAST_MODEL: deepseek-v4-flash-202605
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          allowed_non_write_users: "*"
+          prompt: |
+            /review-pr REPO: ${{ github.repository }} PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Comment management requirements:
+            - Use a single top-level PR review comment for this workflow.
+            - To publish top-level PR feedback, pass the full review body to the
+              wrapper through stdin; do not write review files into the checkout:
+            ./scripts/gh.sh pr review-comment ${{ github.event.pull_request.number }} --body-file - <<'EOF'
+            <!-- cubesandbox-auto-review:start -->
+            ...review body...
+            <!-- cubesandbox-auto-review:end -->
+            EOF
+            - Wrap the review body with these exact hidden markers so future
+              runs can reliably recognize and update the same review comment:
+              <!-- cubesandbox-auto-review:start -->
+              <!-- cubesandbox-auto-review:end -->
+            - Do not call `gh pr comment` or `gh api` directly for top-level
+              comments; the wrapper enforces the current PR, fixed markers, and
+              the cubesandboxbot[bot] author check before editing any comment.
+          show_full_output: true
+
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(./scripts/gh.sh pr review-comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

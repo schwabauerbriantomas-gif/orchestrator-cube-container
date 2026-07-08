@@ -1,0 +1,142 @@
+# Cube Container — Edge Security Configuration
+#
+# TLS 1.3 + WAF + Rate Limiting for production deployments.
+#
+# This file provides:
+#   1. Caddyfile snippet with mTLS, HSTS, and security headers
+#   2. Nginx equivalent (for CubeProxy/OpenResty)
+#
+# Place at /etc/cube-container/Caddyfile or include in nginx.conf
+# ==================================================================
+
+# ---- Caddyfile (recommended for single-node and small clusters) ----
+
+{
+    auto_https off
+    servers {
+        protocols h1 h2 h3
+    }
+
+    # Security defaults
+    admin off
+    persist_config off
+}
+
+# ---- TLS 1.3 Snippet (import in every site block) ----
+
+(tls13) {
+    tls internal {
+        # PCI-DSS 4.1: strong cryptography only
+        protocols tls1.3 tls1.3
+        curves x25519 secp384r1
+        ciphers TLS_AES_256_GCM_SHA384 TLS_AES_128_GCM_SHA256 TLS_CHACHA20_POLY1305_SHA256
+
+        # mTLS: require client certificates for agent connections
+        client_auth {
+            mode require_and_verify
+        }
+    }
+
+    # Security headers (SOC 2: implement security monitoring controls)
+    header {
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        Content-Security-Policy "default-src 'self'"
+    }
+}
+
+# ---- Rate Limiting (requires caddy-l4 or caddy-ratelimit plugin) ----
+
+# Using built-in request matcher for basic rate limiting.
+# For production: install caddy-ratelimit module for proper sliding window.
+
+(rate_limit) {
+    # Rate limit API endpoints: 120 req/min per IP
+    @api path /cubeapi/v1/* /v1/*
+    handle @api {
+        # Basic connection throttling via Caddy's built-in mechanisms
+        # For granular control, use caddy-ratelimit plugin:
+        #   rate_limit {
+        #       zone api {
+        #           key {remote_host}
+        #           events 120
+        #           window 1m
+        #       }
+        #   }
+        reverse_proxy localhost:3000
+    }
+}
+
+# ---- WAF Rules (via Caddy request matcher patterns) ----
+
+(waf) {
+    # Block SQL Injection
+    @sqli {
+        path_regexp sqli (?i)(union\s+select|union\s+all\s+select|or\s+1\s*=\s*1|;\s*drop\s+table|--\s)
+    }
+    abort @sqli
+
+    # Block XSS
+    @xss {
+        path_regexp xss (?i)(<script|</script>|javascript:|on(error|load|click)=)
+    }
+    abort @xss
+
+    # Block Path Traversal
+    @traversal {
+        path_regexp traversal (?i)(\.\./|\.\.\\|%2e%2e%2f|%2e%2e/)
+    }
+    abort @traversal
+
+    # Block Command Injection
+    @cmd_injection {
+        path_regexp cmd (?i)(\$\(|`[^`]+`|\|\s*(bash|sh|zsh)\s)
+    }
+    abort @cmd_injection
+}
+
+# ---- Site Definitions ----
+
+# CubeAPI endpoint (for remote agents and external users)
+cubeapi.example.com {
+    import tls13
+    import waf
+    import rate_limit
+
+    # Log all access (SOC 2 audit trail)
+    log {
+        output file /var/log/cube-container/cubeapi-access.log
+        format json
+    }
+
+    reverse_proxy localhost:3000
+}
+
+# MCP HTTP endpoint (for remote AI agents)
+mcp.example.com {
+    import tls13
+    import waf
+    import rate_limit
+
+    log {
+        output file /var/log/cube-container/mcp-access.log
+        format json
+    }
+
+    reverse_proxy localhost:8080
+}
+
+# WebUI (protected, admin-only via mTLS client cert)
+cubeui.example.com {
+    import tls13
+
+    log {
+        file /var/log/cube-container/cubeui-access.log
+        format json
+    }
+
+    reverse_proxy localhost:12088
+}

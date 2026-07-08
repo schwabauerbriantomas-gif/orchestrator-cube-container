@@ -1,0 +1,17 @@
+# Cube Sandbox one-click default runtime config for `io.containerd.cube.rs`.
+#
+# The current open-source runtime path mostly relies on built-in defaults plus
+# fixed filesystem locations. This file intentionally stays conservative and is
+# mainly used as an on-disk contract for packaged deployments.
+#
+# Standard runtime asset paths installed by `install.sh`:
+#   shim binary:
+#     /usr/local/services/cubetoolbox/cube-shim/bin/containerd-shim-cube-rs
+#   cube runtime:
+#     /usr/local/services/cubetoolbox/cube-shim/bin/cube-runtime
+#   guest kernel:
+#     /usr/local/services/cubetoolbox/cube-kernel-scf/vmlinux
+#   guest image:
+#     /usr/local/services/cubetoolbox/cube-image/cube-guest-image-cpu.img
+#   guest init:
+#     built into guest image as /sbin/init

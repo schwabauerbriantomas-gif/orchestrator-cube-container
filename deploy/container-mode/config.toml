@@ -1,0 +1,38 @@
+# Cube Container — Container Mode Configuration
+#
+# This overrides CubeSandbox's MicroVM defaults to use native containers.
+# Place at /etc/cube-container/config.toml on each node.
+
+[storage]
+# Use overlayfs instead of cubecow/XFS reflink
+storage_backend = "overlayfs"
+data_path = "/var/lib/cube-container"
+
+[containerd]
+# Default runtime is already runc (from config_unix.go defaults)
+default_runtime_name = "runc"
+
+  [containerd.runtimes.runc]
+  runtime_type = "io.containerd.runc.v2"
+  sandboxer = "podsandbox"
+
+[cni]
+bin_dir = "/opt/cni/bin"
+conf_dir = "/etc/cni/net.d"
+
+[network]
+# Standard bridge networking (no eBPF/CubeNet)
+plugin = "bridge"
+cidr = "10.244.0.0/16"
+
+[autopause]
+# Freeze idle containers to save resources
+enabled = true
+idle_timeout = "300s"
+resume_on_request = true
+
+[resource_limits]
+# Defaults for low-RAM nodes (4GB)
+default_memory_mb = 256
+default_cpu_shares = 512
+max_containers_per_node = 15

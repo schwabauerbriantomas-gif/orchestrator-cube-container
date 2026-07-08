@@ -1,0 +1,289 @@
+# Code Sandbox Quickstart
+
+[中文文档](README_zh.md)
+
+The most basic Cube Sandbox usage: create a sandbox, run Python code inside it,
+and execute shell commands — all from your local machine using the E2B Python SDK.
+
+## 1. Background
+
+**Cube Sandbox** is a lightweight MicroVM platform fully compatible with the [E2B SDK](https://e2b.dev). Its architecture is split into two planes:
+
+- **Control Plane**: Manages the sandbox lifecycle. Each `Sandbox.create()` call boots a new KVM MicroVM from a template snapshot in under 50ms. Commands flow through CubeAPI/Master to Cubelet, which uses `cube-agent` (PID 1) inside the VM to start the `envd` service.
+- **Data Plane**: Handles high-frequency code execution and file interaction. Traffic is routed via CubeProxy directly to the `envd` agent inside the sandbox, allowing for the execution of Python or Shell scripts in a secured environment. The sandbox is fully isolated with its own kernel, filesystem, and network.
+
+When the `with` block exits, the sandbox is automatically deleted.
+
+```text
+                            User Script (E2B SDK)
+                                      │
+                                      ▼
+        ┌─────────────────────────────┴─────────────────────────────┐
+        │                                                           │
+ [ 1. Control Plane ]                                     [ 2. Data Plane ]
+(e.g., Sandbox.create)                                  (e.g., run_code, commands.run)
+        │                                                           │
+        ▼  REST API (Port 3000)                                     ▼  WSS / HTTP
+     CubeAPI                                                    CubeProxy
+        │                                                           │
+        ▼                                                           │
+    CubeMaster                                                      │
+        │                                                           │
+        │                  ┌────────────────────────────────────┐   │
+        ▼                  │            KVM MicroVM             │   │
+     Cubelet ──────────────┼──► cube-agent ──► envd  ◄──────────┼───┘
+                           │     (PID 1)         │              │
+                           │                     ▼              │
+                           │                Python / Shell      │
+                           └────────────────────────────────────┘
+```
+
+## 2. Prerequisites
+
+- A running Cube Sandbox deployment
+- Python 3.8+
+
+```bash
+pip install -r requirements.txt
+```
+
+The example scripts use `python-dotenv` to best-effort load a `.env` file from
+the current directory or the script directory. If no `.env` file exists, they
+continue with the current process environment variables.
+
+## 3. Quick Start
+
+### Step 1 — Create the Code Template
+
+```bash
+cubemastercli tpl create-from-image \
+  --image cube-sandbox-int.tencentcloudcr.com/cube-sandbox/sandbox-code:latest \
+  --writable-layer-size 1G \
+  --expose-port 49999 \
+  --expose-port 49983 \
+  --probe 49999
+```
+
+> **Image registry:** Use `cube-sandbox-int.tencentcloudcr.com/cube-sandbox/sandbox-code:latest` (recommended for international access). If you are in mainland China, use `cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/sandbox-code:latest` instead.
+
+Note the `template_id` printed on success.
+
+### Step 2 — Configure Environment Variables
+
+```bash
+cp .env.example .env
+# edit .env and fill in E2B_API_URL and CUBE_TEMPLATE_ID
+```
+
+After that, you can run any example script directly without manually exporting
+the variables first.
+
+Or export directly:
+
+```bash
+export E2B_API_KEY=e2b_000000
+export E2B_API_URL=http://<your-node-ip>:3000
+export CUBE_TEMPLATE_ID=<template-id>
+
+# Only needed when using Cube's built-in mkcert certificate:
+# export SSL_CERT_FILE=/root/.local/share/mkcert/rootCA.pem
+```
+
+### Step 3 — Run Python Code in a Sandbox
+
+```bash
+python exec_code.py
+```
+
+Expected output:
+
+```
+Python 3.x.x (...)
+hello cube
+sum(1..100) = 5050
+```
+
+### Step 4 — Execute Shell Commands
+
+```bash
+python cmd.py
+```
+
+Expected output:
+
+```
+hello cube
+```
+
+## 4. All Examples
+
+| Script | What it shows |
+|--------|---------------|
+| `exec_code.py` | `sandbox.run_code()` — execute Python code inside a sandbox |
+| `cmd.py` | `sandbox.commands.run()` — execute shell commands |
+| `create.py` | `sandbox.get_info()` — retrieve sandbox metadata |
+| `create_with_envs.py` | `Sandbox.create(envs=...)` — pass create-time environment variables |
+| `read.py` | `sandbox.files.read()` — read a file from the sandbox filesystem |
+| `pause.py` | `sandbox.pause()` / `sandbox.connect()` — snapshot and restore |
+| `auto-resume.py` | `lifecycle={"on_timeout": "pause", "auto_resume": True}` — let the platform pause idle sandboxes and resume them on the next request |
+| `auto-kill.py` | `lifecycle={"on_timeout": "kill"}` — let the platform tear down idle sandboxes (the default — destruction is irreversible, the sandbox cannot be resumed) |
+| `network_no_internet.py` | `allow_internet_access=False` — fully air-gapped sandbox |
+| `network_allowlist.py` | `allow_out` — whitelist specific CIDRs, block everything else |
+| `network_denylist.py` | `deny_out` — block specific CIDRs, allow the rest |
+| `restrict_public_access.py` | `network={"allow_public_traffic": False}` — require a per-sandbox token on every public-URL request |
+
+### exec_code.py — Run Python Code
+
+```python
+with Sandbox.create(template=template_id) as sandbox:
+    sandbox.run_code(python_code, on_stdout=lambda line: print(line))
+```
+
+### cmd.py — Shell Commands
+
+```python
+with Sandbox.create(template=template_id) as sandbox:
+    result = sandbox.commands.run("echo hello cube")
+    print(result.stdout)
+```
+
+### Create-Time Environment Variables
+
+You can pass environment variables when creating a sandbox. They are then
+available to subsequent command execution in that sandbox:
+
+```python
+python create_with_envs.py
+```
+
+Expected output:
+
+```text
+user-session-test
+```
+
+### pause.py — Pause & Resume
+
+Snapshot a running sandbox to free compute resources, then restore it later:
+
+```python
+with Sandbox.create(template=template_id) as sandbox:
+    sandbox.pause()       # save memory snapshot, release VM
+    time.sleep(3)
+    sandbox.connect()     # restore snapshot, resume execution
+    print(sandbox.get_info())
+```
+
+### auto-resume.py — Auto Pause & Auto Resume
+
+Like `pause.py`, but the platform handles the pause/resume cycle on its own.
+The `lifecycle` argument mirrors the e2b SDK
+([reference](https://e2b.dev/docs/sandbox/auto-resume)) — set
+`on_timeout="pause"` to opt into idle-timeout pausing and `auto_resume=True`
+so the next request automatically wakes the sandbox up:
+
+```python
+sandbox = Sandbox.create(
+    template=template_id,
+    timeout=30,             # idle threshold the auto-pause sidecar uses
+    lifecycle={"on_timeout": "pause", "auto_resume": True},
+)
+sandbox.run_code("print('first call')")
+time.sleep(45)              # exceeds the timeout — sidecar pauses the sandbox
+sandbox.run_code("print('back from a transparent resume')")
+sandbox.kill()
+```
+
+### auto-kill.py — Auto Kill on Idle Timeout
+
+The destructive twin of `auto-resume.py`. Setting `on_timeout="kill"` (also the
+default when no `lifecycle` is passed) tells the platform to tear the sandbox
+down once it idles past `timeout` — no snapshot is kept, the next request
+fails fast with **410 Gone**:
+
+```python
+sandbox = Sandbox.create(
+    template=template_id,
+    timeout=30,             # idle threshold the sweeper uses
+    lifecycle={"on_timeout": "kill"},
+)
+sandbox.run_code("print('first call')")
+time.sleep(50)              # exceeds the timeout — sweeper kills the sandbox
+try:
+    sandbox.run_code("print('should never run')")
+except Exception as exc:
+    print(f"sandbox is gone: {exc!r}")  # destruction is final
+```
+
+The TUI version of this demo additionally cross-checks `Sandbox.list()` and
+spawns a control sandbox to rule out cluster-wide failures.
+
+### Network Policies
+
+```bash
+# Fully air-gapped
+python network_no_internet.py
+
+# Whitelist: only allow specific CIDRs
+python network_allowlist.py
+
+# Denylist: block specific CIDRs, allow the rest
+python network_denylist.py
+```
+
+### restrict_public_access.py — Require a Token on Every Public-URL Request
+
+By default a sandbox's public URL is reachable by anyone who knows it. For
+sensitive workloads, set `network={"allow_public_traffic": False}` at create
+time. CubeMaster issues a per-sandbox `traffic_access_token`; CubeProxy then
+rejects every request that doesn't carry it in either of these headers
+([reference](https://e2b.dev/docs/network/restrict-public-access)):
+
+- `e2b-traffic-access-token` (E2B-compatible)
+- `cube-traffic-access-token` (CubeSandbox-native alias)
+
+```python
+sandbox = Sandbox.create(
+    template=template_id,
+    network={"allow_public_traffic": False},
+)
+url = f"http://{sandbox.get_host(80)}/"
+
+# Without the token → 403
+requests.get(url)
+
+# With the token → 200
+requests.get(url, headers={"e2b-traffic-access-token": sandbox.traffic_access_token})
+```
+
+## 5. Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `SSL: CERTIFICATE_VERIFY_FAILED` | HTTPS without CA cert | Set `SSL_CERT_FILE=/root/.local/share/mkcert/rootCA.pem` |
+| `Template not found` | Wrong template ID | Re-run `cubemastercli tpl list` |
+| `Connection refused` | CubeAPI not reachable | Check `E2B_API_URL` and port 3000 |
+| `Sandbox timeout` | Sandbox exceeded its TTL | Increase `timeout` in `Sandbox.create()` |
+
+## 6. Directory Structure
+
+```
+code-sandbox-quickstart/
+├── README.md                  # English documentation (this file)
+├── README_zh.md               # Chinese documentation
+├── exec_code.py               # Run Python code inside a sandbox
+├── cmd.py                     # Execute shell commands
+├── create.py                  # Create sandbox and inspect metadata
+├── create_with_envs.py        # Create sandbox with create-time env vars
+├── env_utils.py               # Shared .env loader helper
+├── read.py                    # Read files from the sandbox filesystem
+├── pause.py                   # Pause and resume a sandbox
+├── auto-resume.py             # Auto-pause / auto-resume on idle timeout
+├── auto-kill.py               # Auto-kill on idle timeout (destruction is final)
+├── network_no_internet.py     # Fully air-gapped sandbox
+├── network_allowlist.py       # Outbound CIDR allowlist
+├── network_denylist.py        # Outbound CIDR denylist
+├── restrict_public_access.py  # Token-gated public URL access
+├── requirements.txt           # Python dependencies
+└── .env.example               # Environment variable template
+```
