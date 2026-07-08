@@ -19,6 +19,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -66,7 +69,9 @@ type HAPeer struct {
 type heartbeatPayload struct {
 	FromID    string `json:"from_id"`
 	Role      string `json:"role"`
+	Priority  int    `json:"priority"`
 	Timestamp string `json:"timestamp"` // RFC3339
+	HMAC      string `json:"hmac,omitempty"` // HMAC-SHA256 of FromID+Timestamp using sharedSecret (M1)
 }
 
 // ---- State snapshot for the MCP tool & GET /ha/state ----
@@ -100,11 +105,14 @@ type HAManager struct {
 	selfID   string  // this node's unique ID
 	role     HARole  // RoleActive | RoleStandby | RoleUnjoined
 	activeID string  // ID of the currently active node
+	priority int     // failover priority (lower wins; 0 = highest)
 
 	heartbeatInterval time.Duration // default 2s
 	failoverTimeout   time.Duration // default 10s (5 missed heartbeats)
 	lastHeartbeat     time.Time     // last heartbeat received from the active node
 	startedAt         time.Time     // process/HA start time, for uptime
+
+	sharedSecret string // HMAC pre-shared key for heartbeat auth (M1)
 
 	mu sync.RWMutex
 }
@@ -124,6 +132,18 @@ func newHAManager() *HAManager {
 			selfID = "cube-master"
 		}
 	}
+
+	// Priority: lower number = higher priority (wins split-brain resolution).
+	// Default 100; set via CUBE_HA_PRIORITY env.
+	priority := 100
+	if p := os.Getenv("CUBE_HA_PRIORITY"); p != "" {
+		if n, err := parsePositiveInt(p); err == nil {
+			priority = n
+		}
+	}
+
+	// Shared secret for HMAC heartbeat authentication (M1).
+	secret := os.Getenv("CUBE_HA_SECRET")
 
 	// Parse peers from CUBE_HA_PEERS. Each entry is "host:port"; we do not
 	// know the peer's ID yet, so we use its address as a stand-in ID until a
@@ -164,10 +184,12 @@ func newHAManager() *HAManager {
 		peers:             peers,
 		selfID:            selfID,
 		role:              role,
+		priority:          priority,
 		heartbeatInterval: 2 * time.Second,
 		failoverTimeout:   10 * time.Second,
 		startedAt:         now,
 		lastHeartbeat:     now, // optimistic: don't immediately trip failover at boot
+		sharedSecret:      secret,
 	}
 
 	// If we start active, we are the active node.
@@ -175,7 +197,23 @@ func newHAManager() *HAManager {
 		m.activeID = selfID
 	}
 
+	if secret == "" && len(peers) > 0 {
+		fmt.Fprintln(os.Stderr, "[ha] WARNING: no CUBE_HA_SECRET set — heartbeat endpoint is unauthenticated")
+	}
+
 	return m
+}
+
+// parsePositiveInt parses a non-negative integer string.
+func parsePositiveInt(s string) (int, error) {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, fmt.Errorf("invalid integer")
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
 }
 
 // ---- Lifecycle ----
@@ -222,6 +260,19 @@ func (m *HAManager) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// HMAC authentication (M1): if a shared secret is configured, verify the HMAC.
+	if m.sharedSecret != "" {
+		if hb.HMAC == "" {
+			http.Error(w, "missing heartbeat HMAC", http.StatusUnauthorized)
+			return
+		}
+		expected := computeHeartbeatHMAC(m.sharedSecret, hb.FromID, hb.Timestamp)
+		if !hmac.Equal([]byte(hb.HMAC), []byte(expected)) {
+			http.Error(w, "invalid heartbeat HMAC", http.StatusUnauthorized)
+			return
+		}
+	}
+
 	m.mu.Lock()
 	// Record the heartbeat from the active node.
 	m.lastHeartbeat = time.Now()
@@ -250,19 +301,32 @@ func (m *HAManager) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// If the heartbeat announces an active node, record it.
 	if strings.EqualFold(hb.Role, string(RoleActive)) {
 		m.activeID = hb.FromID
-		// Split-brain mitigation: if WE also think we're active but the
-		// sender has a lexicographically higher ID, we demote.
-		if m.role == RoleActive && hb.FromID != m.selfID && hb.FromID > m.selfID {
-			m.role = RoleStandby
-			fmt.Fprintf(os.Stderr,
-				"[ha] split-brain resolved: demoting to standby (local=%s < peer=%s)\n",
-				m.selfID, hb.FromID)
+		// Split-brain mitigation (M2): if WE also think we're active but the
+		// sender has a numerically lower priority (higher precedence), we demote.
+		// Ties are broken by lexicographic ID comparison.
+		if m.role == RoleActive && hb.FromID != m.selfID {
+			peerWins := hb.Priority < m.priority ||
+				(hb.Priority == m.priority && hb.FromID > m.selfID)
+			if peerWins {
+				m.role = RoleStandby
+				fmt.Fprintf(os.Stderr,
+					"[ha] split-brain resolved: demoting to standby (local=%s prio=%d < peer=%s prio=%d)\n",
+					m.selfID, m.priority, hb.FromID, hb.Priority)
+			}
 		}
 	}
 	m.mu.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"ok"}`))
+}
+
+// computeHeartbeatHMAC returns the hex-encoded HMAC-SHA256 of fromID+timestamp
+// keyed by the shared secret. Used for heartbeat authentication (M1).
+func computeHeartbeatHMAC(secret, fromID, timestamp string) string {
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write([]byte(fromID + timestamp))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // HandleHAGetState handles GET /ha/state.
@@ -404,10 +468,15 @@ func (m *HAManager) sendHeartbeats(ctx context.Context) {
 // lock, then performs network I/O outside the lock to avoid blocking readers.
 func (m *HAManager) dispatchHeartbeats() {
 	m.mu.RLock()
+	ts := time.Now().UTC().Format(time.RFC3339Nano)
 	hb := heartbeatPayload{
 		FromID:    m.selfID,
 		Role:      string(m.role),
-		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Priority:  m.priority,
+		Timestamp: ts,
+	}
+	if m.sharedSecret != "" {
+		hb.HMAC = computeHeartbeatHMAC(m.sharedSecret, m.selfID, ts)
 	}
 	addresses := make([]string, len(m.peers))
 	for i, p := range m.peers {

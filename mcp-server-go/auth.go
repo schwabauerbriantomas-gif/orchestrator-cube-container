@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -202,12 +203,16 @@ func (ks *KeyStore) GenerateKey(role Role, label string) (*APIKey, error) {
 }
 
 // Validate checks an API key + secret pair and returns the key if valid.
+// Uses constant-time comparisons throughout to prevent timing attacks (B1).
 func (ks *KeyStore) Validate(key, secret string) (*APIKey, error) {
 	ks.mu.RLock()
 	k, exists := ks.keys[key]
 	ks.mu.RUnlock()
 
 	if !exists || k.Disabled {
+		// Perform a dummy HMAC compare to equalize timing between
+		// "key not found" and "key found but wrong secret" (B1).
+		hmac.Equal([]byte(secret), []byte("dummy-secret-to-prevent-timing-leak"))
 		return nil, fmt.Errorf("invalid API key")
 	}
 	if !hmac.Equal([]byte(k.Secret), []byte(secret)) {
@@ -637,4 +642,72 @@ func withBodyLimit(next http.Handler) http.Handler {
 		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ---- Per-IP connection limiter (B2) ----
+
+const maxConnsPerIP = 64 // max simultaneous connections per remote IP
+
+// maxConnsListener wraps a net.Listener, rejecting new connections from IPs
+// that already have `limit` active connections. This prevents connection-exhaustion
+// DoS attacks where a single client opens thousands of idle connections.
+type maxConnsListener struct {
+	net.Listener
+	limit    int
+	mu       sync.Mutex
+	connPool map[string]int
+}
+
+func (l *maxConnsListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+
+	remoteIP := ipFromAddr(conn.RemoteAddr().String())
+
+	l.mu.Lock()
+	count := l.connPool[remoteIP]
+	if count >= l.limit {
+		l.mu.Unlock()
+		conn.Close()
+		return nil, fmt.Errorf("max connections per IP exceeded for %s", remoteIP)
+	}
+	l.connPool[remoteIP] = count + 1
+	l.mu.Unlock()
+
+	// Wrap the connection so we decrement the counter on close.
+	return &trackedConn{Conn: conn, ip: remoteIP, pool: l}, nil
+}
+
+func (l *maxConnsListener) release(ip string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if count, ok := l.connPool[ip]; ok {
+		count--
+		if count <= 0 {
+			delete(l.connPool, ip)
+		} else {
+			l.connPool[ip] = count
+		}
+	}
+}
+
+type trackedConn struct {
+	net.Conn
+	ip   string
+	pool *maxConnsListener
+}
+
+func (c *trackedConn) Close() error {
+	c.pool.release(c.ip)
+	return c.Conn.Close()
+}
+
+// ipFromAddr extracts the IP portion from a host:port address string.
+func ipFromAddr(addr string) string {
+	if idx := strings.LastIndex(addr, ":"); idx >= 0 {
+		return addr[:idx]
+	}
+	return addr
 }

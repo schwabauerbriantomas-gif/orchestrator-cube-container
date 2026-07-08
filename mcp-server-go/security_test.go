@@ -67,8 +67,6 @@ func TestValidateGitURL(t *testing.T) {
 		"https://github.com/user/repo",
 		"https://github.com/user/repo.git",
 		"https://gitlab.com/team/project.git",
-		"http://github.com/user/repo",
-		"git://github.com/user/repo.git",
 	}
 	for _, url := range valid {
 		if _, err := validateGitURL(url); err != nil {
@@ -79,13 +77,19 @@ func TestValidateGitURL(t *testing.T) {
 	invalid := []string{
 		"file:///etc/passwd",
 		"/etc/passwd",
-		"ssh://git@github.com/user/repo",
+		"http://github.com/user/repo",     // insecure by default (B4)
+		"git://github.com/user/repo.git",  // insecure by default (B4)
 		"git@github.com:user/repo.git",
 	}
 	for _, url := range invalid {
 		if _, err := validateGitURL(url); err == nil {
 			t.Errorf("expected '%s' to be rejected", url)
 		}
+	}
+
+	// SSH is now allowed by default (B4)
+	if _, err := validateGitURL("ssh://git@github.com/user/repo"); err != nil {
+		t.Errorf("expected ssh:// URL to be valid: %v", err)
 	}
 
 	// Embedded credentials

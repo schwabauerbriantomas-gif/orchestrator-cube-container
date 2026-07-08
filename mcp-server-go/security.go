@@ -26,7 +26,11 @@ func validateSafeName(name string) (string, error) {
 	return name, nil
 }
 
-var allowedGitProtocols = []string{"https://", "http://", "git://"}
+var allowedGitProtocols = []string{"https://", "ssh://"}
+
+// allowedGitProtocolsInsecure holds protocols that are accepted ONLY when
+// CUBE_ALLOW_INSECURE_GIT=true. These are http:// and git:// (plaintext).
+var allowedGitProtocolsInsecure = []string{"http://", "git://"}
 
 // validateCommand validates a command for exec_in_container.
 //
@@ -164,6 +168,8 @@ func validateGitURL(url string) (string, error) {
 	if url == "" {
 		return "", fmt.Errorf("git URL cannot be empty")
 	}
+
+	// Check secure protocols first
 	allowed := false
 	for _, proto := range allowedGitProtocols {
 		if strings.HasPrefix(url, proto) {
@@ -171,8 +177,20 @@ func validateGitURL(url string) (string, error) {
 			break
 		}
 	}
+
+	// Check insecure protocols (only if explicitly enabled)
+	if !allowed && strings.EqualFold(os.Getenv("CUBE_ALLOW_INSECURE_GIT"), "true") {
+		for _, proto := range allowedGitProtocolsInsecure {
+			if strings.HasPrefix(url, proto) {
+				allowed = true
+				fmt.Fprintf(os.Stderr, "[cube-mcp] WARNING: insecure git protocol '%s' accepted (CUBE_ALLOW_INSECURE_GIT=true)\n", proto)
+				break
+			}
+		}
+	}
+
 	if !allowed {
-		return "", fmt.Errorf("invalid git URL '%s': only %s are allowed", url, strings.Join(allowedGitProtocols, ", "))
+		return "", fmt.Errorf("invalid git URL '%s': only %s are allowed (http:// and git:// require CUBE_ALLOW_INSECURE_GIT=true)", url, strings.Join(allowedGitProtocols, ", "))
 	}
 	// Reject URLs with embedded credentials (user:pass@host)
 	parts := strings.SplitN(url, "://", 2)

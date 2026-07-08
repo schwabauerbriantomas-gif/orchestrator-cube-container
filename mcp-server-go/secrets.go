@@ -33,7 +33,11 @@ const (
 	// defaultSecretsPath is the on-disk encrypted store location.
 	defaultSecretsPath = "/var/lib/cube-container/secrets.json"
 	// defaultKeyPath is where auto-generated keys are persisted.
-	defaultKeyPath = "/var/lib/cube-container/secrets.key"
+	// Separated from the secrets store directory to reduce exposure if a path
+	// traversal bug allows reading files from the store (M3).
+	defaultKeyPath = "/var/lib/cube-container/keys/secrets.key"
+	// defaultSaltPath is where the passphrase salt is persisted (M4).
+	defaultSaltPath = "/var/lib/cube-container/keys/secrets.salt"
 	// passphraseIter is the iteration count for passphrase-derived keys (PBKDF2-like).
 	passphraseIter = 100000
 )
@@ -147,16 +151,39 @@ func resolveEncryptionKey() ([]byte, error) {
 	return key, nil
 }
 
-// derivePassphraseSalt returns a deterministic salt derived from the hostname.
-// Using the hostname means the same passphrase on different hosts produces
-// different keys (defense-in-depth against rainbow tables on the passphrase).
+// derivePassphraseSalt returns a random salt persisted to disk (M4).
+// On first use, a 32-byte random salt is generated and stored at defaultSaltPath.
+// On subsequent uses, the persisted salt is loaded. This is far stronger than
+// deriving the salt from the hostname (which an attacker can discover).
 func derivePassphraseSalt() []byte {
-	hostname, err := os.Hostname()
-	if err != nil || hostname == "" {
-		hostname = "cube-container-default"
+	saltPath := envOr("CUBE_SECRETS_SALT_FILE", defaultSaltPath)
+
+	// Try to load existing salt.
+	if data, err := os.ReadFile(saltPath); err == nil && len(data) >= 16 {
+		return data
 	}
-	h := sha256.Sum256([]byte("cube-container:" + hostname))
-	return h[:]
+
+	// Generate a new random salt and persist it.
+	salt := make([]byte, 32)
+	if _, err := rand.Read(salt); err != nil {
+		// Fallback: hostname-derived salt (less secure but better than failing).
+		fmt.Fprintln(os.Stderr, "[cube-mcp] WARNING: could not generate random salt, falling back to hostname-derived salt")
+		hostname, _ := os.Hostname()
+		if hostname == "" {
+			hostname = "cube-container-default"
+		}
+		h := sha256.Sum256([]byte("cube-container:" + hostname))
+		return h[:]
+	}
+
+	if err := os.MkdirAll(filepath.Dir(saltPath), 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "[cube-mcp] WARNING: could not create salt directory: %v\n", err)
+		return salt // use in-memory salt even if we can't persist
+	}
+	if err := os.WriteFile(saltPath, salt, 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "[cube-mcp] WARNING: could not persist salt: %v\n", err)
+	}
+	return salt
 }
 
 // deriveKeyFromPassphrase derives a 32-byte AES key from a passphrase using

@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -152,12 +153,21 @@ func main() {
 			mux.Handle("/ha/state", middleware.RequireRole(http.HandlerFunc(haManager.HandleHAGetState), RoleViewer))
 		}
 
-		// Wrap the entire mux with body size limiting + timeouts
+		// Wrap the entire mux with body size limiting + per-IP connection limit
 		limitedMux := withBodyLimit(mux)
 
 		addr := fmt.Sprintf(":%d", *port)
 		fmt.Fprintf(os.Stderr, "[cube-mcp] listening on %s\n", addr)
 		fmt.Fprintf(os.Stderr, "[cube-mcp] endpoints: POST /mcp, GET /health, POST /auth/keys\n")
+
+		// Listener with per-IP connection limit (B2).
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[cube-mcp] error: %v\n", err)
+			os.Exit(1)
+		}
+		ln = &maxConnsListener{Listener: ln, limit: maxConnsPerIP}
+
 		httpServer := &http.Server{
 			Addr:              addr,
 			Handler:           limitedMux,
@@ -167,9 +177,21 @@ func main() {
 			IdleTimeout:       120 * time.Second,
 			MaxHeaderBytes:    1 << 20, // 1MB max headers
 		}
-		if err := httpServer.ListenAndServe(); err != nil {
-			fmt.Fprintf(os.Stderr, "[cube-mcp] error: %v\n", err)
-			os.Exit(1)
+
+		// TLS support (M5): if cert and key files are provided, use TLS directly.
+		certFile := os.Getenv("CUBE_TLS_CERT")
+		keyFile := os.Getenv("CUBE_TLS_KEY")
+		if certFile != "" && keyFile != "" {
+			fmt.Fprintf(os.Stderr, "[cube-mcp] TLS enabled: cert=%s key=%s\n", certFile, keyFile)
+			if err := httpServer.ServeTLS(ln, certFile, keyFile); err != nil {
+				fmt.Fprintf(os.Stderr, "[cube-mcp] error: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			if err := httpServer.Serve(ln); err != nil {
+				fmt.Fprintf(os.Stderr, "[cube-mcp] error: %v\n", err)
+				os.Exit(1)
+			}
 		}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown mode: %s (use stdio or http)\n", *mode)

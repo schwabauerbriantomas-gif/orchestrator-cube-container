@@ -95,6 +95,11 @@ type RestoreResult struct {
 // ---- Volume backup ----
 
 // BackupVolume creates a tar.gz backup of a volume directory.
+//
+// To minimize the TOCTOU window (B3) — where files change while being archived —
+// we first copy the volume to a temporary staging directory, then tar the copy.
+// This gives a point-in-time snapshot. For databases or write-heavy apps, the
+// container should be paused before backup (see BackupContainer which does this).
 func (bm *BackupManager) BackupVolume(volumeName string) (*BackupInfo, error) {
 	if _, err := validateSafeName(volumeName); err != nil {
 		return nil, err
@@ -108,10 +113,22 @@ func (bm *BackupManager) BackupVolume(volumeName string) (*BackupInfo, error) {
 		return nil, fmt.Errorf("volume '%s' does not exist", volumeName)
 	}
 
+	// Stage a point-in-time copy to minimize the TOCTOU window (B3).
+	stagingDir, err := os.MkdirTemp(bm.BackupRoot, ".stage-*")
+	if err != nil {
+		return nil, fmt.Errorf("create staging dir: %w", err)
+	}
+	defer os.RemoveAll(stagingDir) // clean up staging copy after backup
+
+	stagedPath := filepath.Join(stagingDir, volumeName)
+	if err := copyDir(volPath, stagedPath); err != nil {
+		return nil, fmt.Errorf("stage volume snapshot: %w", err)
+	}
+
 	backupID := generateBackupID("vol", volumeName)
 	backupPath := filepath.Join(bm.BackupRoot, backupID+".tar.gz")
 
-	info, err := bm.tarGzDirectory(volPath, backupPath, volumeName)
+	info, err := bm.tarGzDirectory(stagedPath, backupPath, volumeName)
 	if err != nil {
 		return nil, fmt.Errorf("backup failed: %w", err)
 	}
