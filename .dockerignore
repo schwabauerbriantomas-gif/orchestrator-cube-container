@@ -1,4 +1,33 @@
-**
-!.dockerignore
-!docker/
-!docker/Dockerfile.builder
+# VCS / editor noise
+.git/
+.gitignore
+*.swp
+*.swo
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Local env / secrets
+.env
+.env.*
+
+# CI / docs (not needed in Docker context)
+.github/
+docs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+target/
+dist/
+build/
+*.egg-info/
