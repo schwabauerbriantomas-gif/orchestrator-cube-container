@@ -515,6 +515,27 @@ func (c *DockerClient) KillSandbox(sandboxID string) (interface{}, error) {
 	}, nil
 }
 
+// RestartSandbox gracefully stops and starts a container without removing it.
+func (c *DockerClient) RestartSandbox(sandboxID string) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Docker has a native restart endpoint with a configurable timeout.
+	restartQuery := url.Values{}
+	restartQuery.Set("t", "10")
+	status, data, err := c.dockerPost(ctx, "/containers/"+sandboxID+"/restart", nil, restartQuery)
+	if err != nil {
+		return nil, err
+	}
+	if status >= 400 && status != 304 && status != 404 {
+		return nil, &CubeAPIError{Status: status, Detail: dockerErrorMessage(data)}
+	}
+	return map[string]interface{}{
+		"sandboxID": sandboxID,
+		"restarted": true,
+	}, nil
+}
+
 // PauseSandbox pauses a running container.
 func (c *DockerClient) PauseSandbox(sandboxID string) (interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

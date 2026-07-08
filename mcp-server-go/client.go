@@ -143,6 +143,11 @@ func (c *CubeClient) KillSandbox(sandboxID string) (interface{}, error) {
 	return c.request("DELETE", "/cubeapi/v1/sandboxes/"+sandboxID, nil, nil)
 }
 
+// RestartSandbox stops and starts a container without removing it.
+func (c *CubeClient) RestartSandbox(sandboxID string) (interface{}, error) {
+	return c.request("POST", "/cubeapi/v1/sandboxes/"+sandboxID+"/restart", nil, nil)
+}
+
 func (c *CubeClient) PauseSandbox(sandboxID string) (interface{}, error) {
 	return c.request("POST", "/cubeapi/v1/sandboxes/"+sandboxID+"/pause", nil, nil)
 }

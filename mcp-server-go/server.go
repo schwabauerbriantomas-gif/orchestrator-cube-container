@@ -85,6 +85,9 @@ func main() {
 	versionMgr = newVersionManager(deploy)
 	netMgr = newNetworkManager()
 
+	// Health check manager — runs probes and auto-restarts failed containers
+	healthMgr = newHealthManager(client)
+
 	// Secrets manager (optional — degrades gracefully if key unavailable)
 	sm, err := newSecretsManager()
 	if err != nil {
@@ -95,6 +98,11 @@ func main() {
 
 	// HA manager (active-passive CubeMaster failover)
 	haManager = newHAManager()
+
+	// Start health watcher (auto-restart failed containers)
+	if healthMgr != nil {
+		healthMgr.Start()
+	}
 
 	s := server.NewMCPServer(
 		"cube-container-mcp",
@@ -391,6 +399,28 @@ func registerAllTools(s *server.MCPServer) {
 
 	// --- High availability (1) ---
 	s.AddTool(tool("ha_state", "Get the current high-availability state of this CubeMaster node: role (active/standby), active node ID, peer health, and failover timing."), handleHAState)
+
+	// --- Health checks & auto-restart (4) ---
+	s.AddTool(toolWithArgs("health_check_set", "Configure a health check probe for a container. Supports HTTP (GET 2xx/3xx), TCP (connection), and exec (exit 0) probes. When the probe fails consecutively beyond the threshold, the container is automatically restarted. Args: container_id (required), type (http|tcp|exec, required), interval_seconds (default 30), timeout_seconds (default 5), failure_threshold (default 3). For http: host, http_port, http_path (default /), http_scheme (default http). For tcp: host, tcp_port. For exec: exec_command.",
+		mcp.WithString("container_id", mcp.Required()),
+		mcp.WithString("type", mcp.Required(), mcp.Description("Probe type: http, tcp, or exec")),
+		mcp.WithNumber("interval_seconds", mcp.Description("Check interval (default 30, min 5)")),
+		mcp.WithNumber("timeout_seconds", mcp.Description("Probe timeout (default 5)")),
+		mcp.WithNumber("failure_threshold", mcp.Description("Consecutive failures before restart (default 3)")),
+		mcp.WithString("host", mcp.Description("Target host (default localhost)")),
+		mcp.WithString("http_path", mcp.Description("HTTP probe path (default /)")),
+		mcp.WithNumber("http_port", mcp.Description("HTTP probe port (required for type=http)")),
+		mcp.WithString("http_scheme", mcp.Description("http or https (default http)")),
+		mcp.WithNumber("tcp_port", mcp.Description("TCP probe port (required for type=tcp)")),
+		mcp.WithString("exec_command", mcp.Description("Command to run inside container (required for type=exec)")),
+	), handleHealthCheckSet)
+	s.AddTool(toolWithArgs("health_check_remove", "Remove a health check probe from a container. Auto-restart will stop.",
+		mcp.WithString("container_id", mcp.Required()),
+	), handleHealthCheckRemove)
+	s.AddTool(tool("health_check_list", "List all configured health checks with current status, failure counts, and restart counts."), handleHealthCheckList)
+	s.AddTool(toolWithArgs("health_check_status", "Get detailed health check status for a specific container, including last error and probe configuration.",
+		mcp.WithString("container_id", mcp.Required()),
+	), handleHealthCheckStatus)
 
 	// --- Secrets management (4) ---
 	s.AddTool(toolWithArgs("secret_set", "Store an encrypted secret (API keys, passwords, tokens). Value is encrypted at rest with AES-256-GCM. RBAC: admin only.",

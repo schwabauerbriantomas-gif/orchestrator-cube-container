@@ -40,6 +40,7 @@ type ContainerBackend interface {
 	GetSandbox(sandboxID string) (interface{}, error)
 	CreateSandbox(templateID string, memoryMB int, cpuCount float64, envVars, metadata map[string]interface{}) (interface{}, error)
 	KillSandbox(sandboxID string) (interface{}, error)
+	RestartSandbox(sandboxID string) (interface{}, error)
 	PauseSandbox(sandboxID string) (interface{}, error)
 	ResumeSandbox(sandboxID string) (interface{}, error)
 	GetSandboxLogs(sandboxID string, limit int) (interface{}, error)
