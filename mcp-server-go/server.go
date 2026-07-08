@@ -94,6 +94,15 @@ func main() {
 	// Scaling manager — replica groups + load balancing
 	scaleMgr = newScaleManager(client)
 
+	// Alerting — monitoring rules + webhook notifications
+	alertMgr = newAlertManager()
+
+	// ConfigMap manager — non-sensitive configuration data
+	configMgr = newConfigMapManager()
+
+	// Service discovery — logical name → endpoint registry
+	discoveryMgr = newDiscoveryManager()
+
 	// Secrets manager (optional — degrades gracefully if key unavailable)
 	sm, err := newSecretsManager()
 	if err != nil {
@@ -108,6 +117,11 @@ func main() {
 	// Start health watcher (auto-restart failed containers)
 	if healthMgr != nil {
 		healthMgr.Start()
+	}
+
+	// Start alert watcher (evaluate monitoring rules)
+	if alertMgr != nil {
+		alertMgr.Start()
 	}
 
 	s := server.NewMCPServer(
@@ -451,6 +465,23 @@ func registerAllTools(s *server.MCPServer) {
 		mcp.WithString("name", mcp.Required()),
 	), handleServiceRemove)
 
+	// --- Service discovery (4) ---
+	s.AddTool(toolWithArgs("service_register", "Register or update a service endpoint in the discovery registry. Maps a logical name to a container's host:port. Args: name (required), container_id (required), host (default localhost), port (required).",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("container_id", mcp.Required()),
+		mcp.WithString("host", mcp.Description("Host (default localhost)")),
+		mcp.WithNumber("port", mcp.Required()),
+	), handleDiscoveryRegister)
+	s.AddTool(toolWithArgs("service_deregister", "Remove a service from the discovery registry.",
+		mcp.WithString("name", mcp.Required()),
+	), handleDiscoveryDeregister)
+	s.AddTool(toolWithArgs("service_resolve", "Look up a service by logical name. Returns host:port.",
+		mcp.WithString("name", mcp.Required()),
+	), handleDiscoveryResolve)
+	s.AddTool(toolWithArgs("service_entries", "List all registered service discovery entries. Pass sync=true to first refresh from running container labels.",
+		mcp.WithString("sync", mcp.Description("Set to 'true' to sync from container labels first")),
+	), handleServiceListEntries)
+
 	// --- High availability (1) ---
 	s.AddTool(tool("ha_state", "Get the current high-availability state of this CubeMaster node: role (active/standby), active node ID, peer health, and failover timing."), handleHAState)
 
@@ -488,6 +519,42 @@ func registerAllTools(s *server.MCPServer) {
 	s.AddTool(toolWithArgs("secret_delete", "Permanently delete a secret. RBAC: admin.",
 		mcp.WithString("name", mcp.Required()),
 	), handleSecretDelete)
+
+	// --- Alerting (4) ---
+	s.AddTool(toolWithArgs("alert_rule_add", "Create an alert rule. Types: container_down, cpu_high, disk_high, mem_high. Args: id (required), name (required), type (required), severity (critical/warning/info, default warning), threshold (e.g. 80 for 80%), container_id (for container_down), node_id (for cpu/disk/mem), webhook_url (optional override), cooldown_sec (default 300).",
+		mcp.WithString("id", mcp.Required()),
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("type", mcp.Required(), mcp.Description("container_down, cpu_high, disk_high, or mem_high")),
+		mcp.WithString("severity", mcp.Description("critical, warning, or info (default warning)")),
+		mcp.WithNumber("threshold", mcp.Description("Threshold value (e.g. 80 for 80%)")),
+		mcp.WithString("container_id", mcp.Description("Container ID for container_down rules")),
+		mcp.WithString("node_id", mcp.Description("Node ID for cpu/disk/mem rules")),
+		mcp.WithString("webhook_url", mcp.Description("Webhook URL override (default uses CUBE_ALERT_WEBHOOK)")),
+		mcp.WithNumber("cooldown_sec", mcp.Description("Min seconds between alert repeats (default 300)")),
+	), handleAlertRuleAdd)
+	s.AddTool(toolWithArgs("alert_rule_remove", "Remove an alert rule.",
+		mcp.WithString("id", mcp.Required()),
+	), handleAlertRuleRemove)
+	s.AddTool(tool("alert_list", "List all alert rules with severity, fire count, and last fired timestamp."), handleAlertList)
+	s.AddTool(toolWithArgs("alert_test", "Fire a test alert to verify webhook configuration.",
+		mcp.WithString("id", mcp.Required()),
+	), handleAlertTest)
+
+	// --- ConfigMaps (5) ---
+	s.AddTool(toolWithArgs("configmap_create", "Create a ConfigMap with non-sensitive configuration data (env vars, feature flags). For sensitive data use secret_set instead.",
+		mcp.WithString("name", mcp.Required()),
+	), handleConfigMapCreate)
+	s.AddTool(toolWithArgs("configmap_update", "Update a ConfigMap. By default merges new keys with existing data. Use mode=replace to overwrite entirely.",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("mode", mcp.Description("merge (default) or replace")),
+	), handleConfigMapUpdate)
+	s.AddTool(toolWithArgs("configmap_get", "Get a ConfigMap with all its data values.",
+		mcp.WithString("name", mcp.Required()),
+	), handleConfigMapGet)
+	s.AddTool(tool("configmap_list", "List all ConfigMaps with key count and last updated timestamp."), handleConfigMapList)
+	s.AddTool(toolWithArgs("configmap_remove", "Remove a ConfigMap permanently.",
+		mcp.WithString("name", mcp.Required()),
+	), handleConfigMapRemove)
 }
 
 // ---- Tool builders ----

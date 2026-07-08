@@ -102,6 +102,11 @@ var toolPermissions = map[string]Role{
 	"scale_set":      RoleOperator,
 	"service_list":   RoleViewer,
 	"service_get":    RoleViewer,
+	// Service discovery — operator to register/deregister, viewer to resolve/list
+	"service_register":   RoleOperator,
+	"service_deregister": RoleOperator,
+	"service_resolve":    RoleViewer,
+	"service_entries":    RoleViewer,
 	// Health checks — operator to configure/remove, viewer to list/status
 	"health_check_set":    RoleOperator,
 	"health_check_remove": RoleOperator,
@@ -112,6 +117,17 @@ var toolPermissions = map[string]Role{
 	"secret_get":    RoleOperator,
 	"secret_list":   RoleViewer,
 	"secret_delete": RoleAdmin,
+	// Alerting — admin to create/remove, viewer to list, operator to test
+	"alert_rule_add":    RoleAdmin,
+	"alert_rule_remove": RoleAdmin,
+	"alert_list":        RoleViewer,
+	"alert_test":        RoleOperator,
+	// ConfigMaps — admin to create/remove, operator to update, viewer to list/get
+	"configmap_create": RoleAdmin,
+	"configmap_update": RoleOperator,
+	"configmap_get":    RoleViewer,
+	"configmap_list":   RoleViewer,
+	"configmap_remove": RoleAdmin,
 }
 
 // roleLevel returns a numeric level for comparison (higher = more permissions).
