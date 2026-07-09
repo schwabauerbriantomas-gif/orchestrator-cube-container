@@ -98,6 +98,7 @@ feature_name.go
 | `databases.go` | Managed DB provisioning | 3 |
 | `certificates.go` | TLS cert inspection | 2 |
 | `events.go` | Cluster event stream | 2 |
+| `secure_sandbox.go` | KVM sandbox for untrusted code (egress, vault, snapshots) | 8 |
 
 #### 4. Security Layer
 

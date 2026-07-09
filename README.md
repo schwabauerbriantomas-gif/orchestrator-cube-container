@@ -3,7 +3,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
 [![MCP Server](https://img.shields.io/badge/MCP-129%20tools-orange)](https://modelcontextprotocol.io)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8)](https://go.dev)
-[![Security Audit](https://img.shields.io/badge/Security-35%20issues%20fixed-red)](#security)
+[![Security Audit](https://img.shields.io/badge/Security-40%20issues%20fixed-red)](#security)
 [![Tests](https://img.shields.io/badge/Tests-43%20passing-brightgreen)](#testing)
 
 A container orchestration platform controlled by AI through the Model Context Protocol. An MCP server that replaces the DevOps role — the operations interface is natural language, not YAML.
@@ -283,6 +283,21 @@ docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-con
 |------|-------------|------|
 | `audit_query` | Search tamper-evident audit trail (hash chain) | viewer |
 
+### Secure Sandbox (8) — KVM untrusted code execution
+
+These tools provide hardware-level isolation for running untrusted code. Each sandbox runs its own guest kernel — kernel escape is impossible. **Cube backend only** (`CUBE_BACKEND=cube`).
+
+| Tool | Description | Role |
+|------|-------------|------|
+| `secure_sandbox_create` | Create KVM-isolated VM with egress filtering + credential vault | admin |
+| `secure_sandbox_exec` | Execute code inside sandbox (max 300s timeout) | operator |
+| `secure_sandbox_egress_add` | Add domain to allowlist/blocklist | admin |
+| `secure_sandbox_egress_list` | List egress rules for sandbox | viewer |
+| `secure_sandbox_egress_remove` | Remove egress rule | admin |
+| `secure_sandbox_snapshot` | CubeCoW instant snapshot for rollback | operator |
+| `secure_sandbox_restore` | Restore sandbox to previous state | admin |
+| `secure_sandbox_list` | List secure sandboxes only (filters by metadata) | viewer |
+
 ### High Availability (1)
 
 | Tool | Description | Role |
@@ -300,7 +315,8 @@ docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-con
 | 1 | 4 (C1-C4) | 5 (H1-H5) | 5 (M1-M5) | 4 (B1-B4) | 18 |
 | 2 | 2 (C5-C6) | 3 (H6-H8) | 2 (M6-M7) | 1 (B5) | 8 |
 | 3 | 1 (C7) | 3 (H9-H11) | 3 (M8-M10) | 2 (B6-B7) | 9 |
-| **Total** | **7** | **11** | **10** | **7** | **35** |
+| 4 | 1 (C8) | 1 (H12) | 2 (M11-M12) | 1 (B8) | 5 |
+| **Total** | **8** | **12** | **12** | **8** | **40** |
 
 ### Security Features
 
@@ -332,6 +348,8 @@ docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-con
 | `validateBranchName` | Git branch injection |
 | `isPrivateHost` | SSRF to internal/cloud metadata IPs |
 | `validateTelegramToken` | Telegram token format spoofing |
+| `validateDomainRule` | Egress domain injection / SSRF |
+| `validateRuleID` | Egress rule ID path traversal |
 
 ## Configuration
 
@@ -433,6 +451,8 @@ mcp-server-go/
 ├── databases.go         — Managed DB provisioning (PG/MySQL/Redis/Mongo)
 ├── certificates.go      — TLS certificate inspection + renewal
 ├── events.go            — Cluster event stream
+├── secure_sandbox.go    — KVM secure sandbox (untrusted code, egress, vault, snapshots)
+├── handlers_secure.go   — 8 secure sandbox handlers
 ├── webhook.go           — Git webhook listener
 ├── scheduler.go         — 4D bin-packing scheduler
 ├── rollback.go          — Deploy rollback
@@ -466,6 +486,7 @@ The `skills/` directory contains playbooks that teach the AI model how to chain 
 | `security-hardening.md` | Lock down: tokens, secrets, alerts, cert monitoring |
 | `backup-strategy.md` | Scheduled backups, restore, GC strategy |
 | `environment-lifecycle.md` | Dev → staging → prod promotion workflow |
+| `untrusted-code-execution.md` | KVM sandbox for untrusted/third-party code |
 
 ## Roadmap
 

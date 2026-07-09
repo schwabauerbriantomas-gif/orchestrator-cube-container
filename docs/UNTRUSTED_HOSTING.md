@@ -35,6 +35,16 @@ overhead per instance. Each sandbox runs its own guest kernel.
 | **Time limits** | `max_lifetime_seconds` param | Auto-pause after N seconds |
 | **Network kill** | `network_disabled` param | Zero network access |
 
+### Security Hardening Applied (Round 4 Audit)
+
+| ID | Fix |
+|----|-----|
+| C8 | Vault config rejects plaintext HTTP to remote hosts |
+| H12 | Egress rule IDs validated (alphanumeric only, no path traversal) |
+| M11 | Egress rules registered directly against CubeEgress, not just metadata |
+| M12 | `secure_sandbox_list` filters to only secure sandboxes, not all containers |
+| B8 | DNS rebinding documented as known limitation (CubeEgress must enforce at connection time) |
+
 ### Why This Beats External Solutions
 
 - **No KVM setup needed** — CubeSandbox already manages it

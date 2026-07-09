@@ -100,6 +100,10 @@ func validateDomainRule(domain string) error {
 		return fmt.Errorf("invalid domain format: %s", domain)
 	}
 	// Block internal/private domains
+	// B8 NOTE: this check is TOCTOU-vulnerable to DNS rebinding — a domain
+	// could resolve to a public IP at validation time, then rebind to a
+	// private IP during actual egress. CubeEgress MUST enforce IP-level
+	// filtering at connection time, not rely solely on this name check.
 	if isPrivateHost(cleaned) {
 		return fmt.Errorf("cannot add egress rule for private/internal host: %s", domain)
 	}
@@ -222,6 +226,24 @@ func (sm *SecureSandboxManager) Create(config SecureSandboxConfig) (*SecureSandb
 		}
 	}
 
+	// M11 fix: register egress rules DIRECTLY against CubeEgress post-creation,
+	// not just via metadata forwarding. This ensures the policy is enforced even
+	// if CubeAPI fails to forward the metadata to CubeEgress.
+	if !config.NetworkDisabled && len(config.EgressAllowList) > 0 {
+		for _, domain := range config.EgressAllowList {
+			if _, err := sm.AddEgressRule(sandboxID, domain, "allow"); err != nil {
+				fmt.Printf("[secure-sandbox] WARNING: direct egress rule '%s' failed for %s: %v\n", domain, sandboxID, err)
+			}
+		}
+	}
+	if len(config.EgressBlockList) > 0 {
+		for _, domain := range config.EgressBlockList {
+			if _, err := sm.AddEgressRule(sandboxID, domain, "block"); err != nil {
+				fmt.Printf("[secure-sandbox] WARNING: direct block rule '%s' failed for %s: %v\n", domain, sandboxID, err)
+			}
+		}
+	}
+
 	// Build response
 	egressPolicy := "allowlist"
 	if config.NetworkDisabled {
@@ -250,7 +272,14 @@ func (sm *SecureSandboxManager) Create(config SecureSandboxConfig) (*SecureSandb
 
 // configureVault sends credential vault config to CubeEgress proxy.
 // The keys are stored in the proxy, never in the sandbox.
+// C8 fix: reject plaintext HTTP for remote endpoints to prevent key sniffing.
 func (sm *SecureSandboxManager) configureVault(cube *CubeClient, sandboxID string, vault map[string]string) error {
+	// C8: refuse to send vault keys over plaintext HTTP to remote hosts.
+	// localhost connections are always safe (no network transit).
+	if !strings.HasPrefix(cube.BaseURL, "https://") && !strings.HasPrefix(cube.BaseURL, "http://localhost") && !strings.HasPrefix(cube.BaseURL, "http://127.0.0.1") {
+		return fmt.Errorf("CubeEgress vault config requires HTTPS (current BaseURL: %s) — refusing to send API keys over plaintext", cube.BaseURL)
+	}
+
 	// CubeEgress runs alongside CubeAPI. We configure it via the internal API.
 	// Each entry maps: domain → {header_name, key_value}
 	vaultConfig := make(map[string]interface{})
@@ -344,9 +373,23 @@ func (sm *SecureSandboxManager) ListEgressRules(sandboxID string) ([]EgressRule,
 	return rules, nil
 }
 
-func (sm *SecureSandboxManager) RemoveEgressRule(ruleID string) error {
+// ruleIDPattern validates egress rule IDs (alphanumeric + hyphens only).
+// H12 fix: prevents path traversal via ruleID in DELETE URL.
+var ruleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
+
+func validateRuleID(ruleID string) error {
 	if ruleID == "" {
 		return fmt.Errorf("rule_id is required")
+	}
+	if !ruleIDPattern.MatchString(ruleID) {
+		return fmt.Errorf("invalid rule_id format (alphanumeric, hyphens, underscores only)")
+	}
+	return nil
+}
+
+func (sm *SecureSandboxManager) RemoveEgressRule(ruleID string) error {
+	if err := validateRuleID(ruleID); err != nil {
+		return err
 	}
 
 	cube, ok := sm.backend.(*CubeClient)

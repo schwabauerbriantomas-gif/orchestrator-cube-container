@@ -145,13 +145,43 @@ func handleSecureSandboxList(_ context.Context, req mcp.CallToolRequest) (*mcp.C
 	args := parseArgs(req)
 	state := argString(args, "state")
 
-	// Delegate to the regular sandbox listing, but filter for secure sandboxes
-	data, err := client.ListSandboxes(state, 100)
+	// M12 fix: list all sandboxes, then filter to only secure ones
+	data, err := client.ListSandboxes(state, 200)
 	if err != nil {
 		return unwrapError(err), nil
 	}
 
-	// Filter: only return sandboxes with secure_sandbox metadata
-	// The backend marks them — we just pass through
-	return okResult(data), nil
+	// Filter: only return sandboxes with secure_sandbox=true in metadata
+	rawList, ok := data.([]interface{})
+	if !ok {
+		return okResult([]interface{}{}), nil
+	}
+
+	filtered := make([]interface{}, 0)
+	for _, item := range rawList {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		// Check metadata for secure_sandbox flag (Docker: "Labels", Cube: "metadata")
+		meta, _ := m["metadata"].(map[string]interface{})
+		if meta == nil {
+			meta, _ = m["Metadata"].(map[string]interface{})
+		}
+		if meta == nil {
+			// Check Docker labels
+			labels, _ := m["Labels"].(map[string]interface{})
+			if labels != nil {
+				if v, ok := labels["secure_sandbox"]; ok && fmt.Sprintf("%v", v) == "true" {
+					filtered = append(filtered, item)
+				}
+			}
+			continue
+		}
+		if v, ok := meta["secure_sandbox"]; ok && (v == true || fmt.Sprintf("%v", v) == "true") {
+			filtered = append(filtered, item)
+		}
+	}
+
+	return okResult(filtered), nil
 }

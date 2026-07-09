@@ -156,6 +156,10 @@ Before adding any tool that accepts user input:
 - [ ] Does it accept an image ref? → `validateImageRef()`
 - [ ] Does it accept a domain? → `validateDomain()`
 - [ ] Does it accept a Telegram token? → `validateTelegramToken()`
+- [ ] Does it accept a domain for egress? → `validateDomainRule()`
+- [ ] Does it accept an egress rule ID? → `validateRuleID()`
+- [ ] Does it send API keys to a remote host? → Verify HTTPS first (C8 pattern)
+- [ ] Does it concat user input into a URL path? → Validate format first (H12 pattern)
 - [ ] Does it pass args to a shell command? → `validateCommand()` (allowlist)
 
 ## Commit Message Format
