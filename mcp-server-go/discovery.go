@@ -16,6 +16,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -145,7 +146,8 @@ func (dm *DiscoveryManager) Resolve(name string) (string, *ServiceEntry, error) 
 	if !ok {
 		return "", nil, fmt.Errorf("service %q not registered", name)
 	}
-	return fmt.Sprintf("%s:%d", entry.Host, entry.Port), &entry, nil
+	endpoint := net.JoinHostPort(entry.Host, fmt.Sprintf("%d", entry.Port))
+	return endpoint, &entry, nil
 }
 
 // ListServices returns all registered entries sorted by name for stable
@@ -323,7 +325,7 @@ func handleDiscoveryRegister(_ context.Context, req mcp.CallToolRequest) (*mcp.C
 	return okResult(map[string]interface{}{
 		"status": "registered",
 		"name":   name,
-		"endpoint": fmt.Sprintf("%s:%d", host, port),
+		"endpoint": net.JoinHostPort(host, fmt.Sprintf("%d", port)),
 	}), nil
 }
 

@@ -449,7 +449,7 @@ func (hm *HealthManager) runTCPProbe(hc *HealthCheck) (bool, error) {
 	if host == "" {
 		host = "localhost"
 	}
-	addr := fmt.Sprintf("%s:%d", host, hc.TCPPort)
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", hc.TCPPort))
 
 	timeout := time.Duration(hc.TimeoutSeconds) * time.Second
 	if timeout < 1*time.Second {
