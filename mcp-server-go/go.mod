@@ -2,7 +2,13 @@ module github.com/schwabauerbriantomas-gif/cube-container/mcp-server-go
 
 go 1.25.12
 
-require github.com/mark3labs/mcp-go v0.32.0
+require github.com/mark3labs/mcp-go v0.56.0
+
+require (
+	github.com/google/jsonschema-go v0.4.2 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	golang.org/x/text v0.40.0 // indirect
+)
 
 require (
 	github.com/google/uuid v1.6.0 // indirect
