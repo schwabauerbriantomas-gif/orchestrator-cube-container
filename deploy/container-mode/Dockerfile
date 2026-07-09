@@ -50,7 +50,7 @@ COPY mcp-server-go/ ./mcp-server-go/
 RUN cd mcp-server-go && CGO_ENABLED=0 go build -o /cube-mcp .
 
 # ---- Stage 4: Runtime ----
-FROM ubuntu:22.04
+FROM ubuntu:26.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     containerd \
