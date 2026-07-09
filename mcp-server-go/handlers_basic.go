@@ -23,7 +23,7 @@ func handleBackendInfo(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolR
 			"environments", "notifications", "auth_tokens", "scheduled_jobs",
 			"metrics_query", "database_provisioning", "certificates", "events",
 		},
-		"tool_count": 129,
+		"tool_count": 158,
 	}
 	return okResult(info), nil
 }

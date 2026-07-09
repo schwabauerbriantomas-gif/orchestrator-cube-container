@@ -195,6 +195,38 @@ var toolPermissions = map[string]Role{
 	"secure_sandbox_snapshot":       RoleOperator,
 	"secure_sandbox_restore":        RoleAdmin,
 	"secure_sandbox_list":           RoleViewer,
+	// Hypervisor: VM lifecycle — viewer to list/get, operator for snapshot ops, admin to create/delete/migrate
+	"vm_list":             RoleViewer,
+	"vm_get":              RoleViewer,
+	"vm_create":           RoleAdmin,
+	"vm_start":            RoleOperator,
+	"vm_stop":             RoleOperator,
+	"vm_pause":            RoleOperator,
+	"vm_resume":           RoleOperator,
+	"vm_delete":           RoleAdmin,
+	"vm_snapshot_create":  RoleOperator,
+	"vm_snapshot_list":    RoleViewer,
+	"vm_snapshot_restore": RoleAdmin,
+	"vm_snapshot_delete":  RoleAdmin,
+	"vm_migrate":          RoleAdmin,
+	// Hypervisor: ZFS storage — viewer to list/status, admin to create/destroy
+	"zpool_list":         RoleViewer,
+	"zpool_create":       RoleAdmin,
+	"zpool_status":       RoleViewer,
+	"zpool_destroy":      RoleAdmin,
+	"zdataset_list":      RoleViewer,
+	"zdataset_create":    RoleAdmin,
+	"zdataset_destroy":   RoleAdmin,
+	"zsnapshot_create":   RoleOperator,
+	"zsnapshot_list":     RoleViewer,
+	"zsnapshot_destroy":  RoleAdmin,
+	"zsnapshot_clone":    RoleOperator,
+	"zsnapshot_rollback": RoleAdmin,
+	// Hypervisor: GPU — viewer to list/stats, admin to assign/release
+	"gpu_list":    RoleViewer,
+	"gpu_stats":   RoleViewer,
+	"gpu_assign":  RoleAdmin,
+	"gpu_release": RoleAdmin,
 }
 
 // roleLevel returns a numeric level for comparison (higher = more permissions).

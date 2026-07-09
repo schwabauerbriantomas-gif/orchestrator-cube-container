@@ -43,9 +43,9 @@ jobs:
 
       - name: Verify tool count matches README
         run: |
-          # Ensure tools_registration.go registers exactly 129 tools
+          # Ensure tools_registration.go registers exactly 158 tools
           TOOL_COUNT=$(grep -c 'registerTool(s,' tools_registration.go)
-          EXPECTED=129
+          EXPECTED=158
           if [ "$TOOL_COUNT" != "$EXPECTED" ]; then
             echo "::error::Tool count mismatch: tools_registration.go has $TOOL_COUNT tools, README claims $EXPECTED"
             echo "Update README.md badge and tool reference table, or fix the registration."

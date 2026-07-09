@@ -519,4 +519,113 @@ func registerAllTools(s *server.MCPServer) {
 	registerTool(s,toolWithArgs("secure_sandbox_list", "List all secure sandboxes with status, egress policy, and expiry.",
 		mcp.WithString("state", mcp.Description("Filter: running, paused, stopped")),
 	), handleSecureSandboxList)
+
+	// ── Hypervisor: VM lifecycle (libvirt/KVM) (12) ──────────────────────
+	registerTool(s, toolWithArgs("vm_list", "List all VMs (KVM/QEMU domains) managed by libvirt. Returns name, state, memory, vCPU count. Filter by state (running, paused, shut off).",
+		mcp.WithString("state", mcp.Description("Filter: running, paused, 'shut off'")),
+	), handleVMList)
+	registerTool(s, toolWithArgs("vm_get", "Get detailed info for a specific VM including state, memory, vCPU, autostart, and IP addresses.",
+		mcp.WithString("name", mcp.Required(), mcp.Description("VM domain name")),
+	), handleVMGet)
+	registerTool(s, toolWithArgs("vm_create", "Create and start a new KVM virtual machine. Generates libvirt domain XML and defines it. Creates qcow2 disk if no disk_path given.",
+		mcp.WithString("name", mcp.Required(), mcp.Description("VM name")),
+		mcp.WithNumber("vcpu", mcp.Description("Number of virtual CPUs (default 2)")),
+		mcp.WithNumber("memory_mb", mcp.Description("Memory in MB (default 2048)")),
+		mcp.WithNumber("disk_gb", mcp.Description("Disk size in GB (default 20)")),
+		mcp.WithString("disk_path", mcp.Description("Path to existing qcow2 image (default: auto-create)")),
+		mcp.WithString("iso_path", mcp.Description("ISO image path for OS installer (CDROM)")),
+		mcp.WithString("network", mcp.Description("libvirt network name (default: default)")),
+	), handleVMCreate)
+	registerTool(s, toolWithArgs("vm_start", "Start a stopped VM.",
+		mcp.WithString("name", mcp.Required()),
+	), handleVMStart)
+	registerTool(s, toolWithArgs("vm_stop", "Shutdown a running VM. Use force=true for immediate power-off (equivalent to pulling the plug).",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("force", mcp.Description("true = ACPI power-off (destroy); false = graceful shutdown (default)")),
+	), handleVMStop)
+	registerTool(s, toolWithArgs("vm_pause", "Suspend (pause) a running VM. State is preserved in memory.",
+		mcp.WithString("name", mcp.Required()),
+	), handleVMPause)
+	registerTool(s, toolWithArgs("vm_resume", "Resume a paused VM.",
+		mcp.WithString("name", mcp.Required()),
+	), handleVMResume)
+	registerTool(s, toolWithArgs("vm_delete", "Permanently delete a VM. Stops if running, undefines domain, optionally removes disk image.",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("remove_disk", mcp.Description("true = also delete the qcow2 disk image")),
+	), handleVMDelete)
+	registerTool(s, toolWithArgs("vm_snapshot_create", "Create a snapshot of a VM. Snapshots are stored by libvirt and allow instant rollback.",
+		mcp.WithString("name", mcp.Required(), mcp.Description("VM name")),
+		mcp.WithString("snapshot_name", mcp.Required()),
+	), handleVMSnapshot)
+	registerTool(s, toolWithArgs("vm_snapshot_list", "List all snapshots for a VM.",
+		mcp.WithString("name", mcp.Required()),
+	), handleVMSnapshotList)
+	registerTool(s, toolWithArgs("vm_snapshot_restore", "Revert a VM to a previous snapshot state.",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("snapshot_name", mcp.Required()),
+	), handleVMSnapshotRestore)
+	registerTool(s, toolWithArgs("vm_snapshot_delete", "Delete a VM snapshot.",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("snapshot_name", mcp.Required()),
+	), handleVMSnapshotDelete)
+	registerTool(s, toolWithArgs("vm_migrate", "Migrate a VM to another host via libvirt live or offline migration.",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("dest_host", mcp.Required(), mcp.Description("Destination hostname or IP")),
+		mcp.WithString("live", mcp.Description("true = live migration (minimal downtime); false = offline")),
+	), handleVMMigrate)
+
+	// ── Hypervisor: ZFS storage (14) ────────────────────────────────────
+	registerTool(s, tool("zpool_list", "List all ZFS storage pools with size, allocated, free space, and health status."), handleZPoolList)
+	registerTool(s, toolWithArgs("zpool_create", "Create a new ZFS pool from one or more block devices.",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("devices", mcp.Required(), mcp.Description("Block device(s), e.g. /dev/sdb or mirror /dev/sdb /dev/sdc")),
+	), handleZPoolCreate)
+	registerTool(s, toolWithArgs("zpool_status", "Get detailed health and vdev status of a ZFS pool (or all pools if no name given).",
+		mcp.WithString("name", mcp.Description("Pool name (empty = all pools)")),
+	), handleZPoolStatus)
+	registerTool(s, toolWithArgs("zpool_destroy", "Permanently destroy a ZFS pool and all its datasets.",
+		mcp.WithString("name", mcp.Required()),
+	), handleZPoolDestroy)
+	registerTool(s, toolWithArgs("zdataset_list", "List ZFS datasets (filesystems) with usage stats. Filter by pool.",
+		mcp.WithString("pool", mcp.Description("Pool or dataset prefix")),
+	), handleZDatasetList)
+	registerTool(s, toolWithArgs("zdataset_create", "Create a ZFS dataset (filesystem) with optional compression and record size.",
+		mcp.WithString("name", mcp.Required(), mcp.Description("Full path: pool/dataset")),
+		mcp.WithString("compression", mcp.Description("Compression algorithm: on, off, lz4, gzip, zstd")),
+		mcp.WithString("recordsize", mcp.Description("Record size: 4K-1M (default: 128K)")),
+	), handleZDatasetCreate)
+	registerTool(s, toolWithArgs("zdataset_destroy", "Destroy a ZFS dataset and all snapshots within it.",
+		mcp.WithString("name", mcp.Required()),
+	), handleZDatasetDestroy)
+	registerTool(s, toolWithArgs("zsnapshot_create", "Create an instant ZFS snapshot of a dataset. Snapshots are near-zero cost (CoW).",
+		mcp.WithString("dataset", mcp.Required(), mcp.Description("Dataset name: pool/dataset")),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Snapshot label")),
+	), handleZSnapshotCreate)
+	registerTool(s, toolWithArgs("zsnapshot_list", "List ZFS snapshots with usage and creation time. Filter by dataset.",
+		mcp.WithString("dataset", mcp.Description("Dataset name to filter")),
+	), handleZSnapshotList)
+	registerTool(s, toolWithArgs("zsnapshot_destroy", "Destroy a ZFS snapshot.",
+		mcp.WithString("name", mcp.Required(), mcp.Description("Full snapshot path: pool/dataset@snap")),
+	), handleZSnapshotDestroy)
+	registerTool(s, toolWithArgs("zsnapshot_clone", "Clone a ZFS snapshot into a new writable dataset. Useful for creating VM templates from snapshots.",
+		mcp.WithString("snapshot", mcp.Required(), mcp.Description("Source: pool/dataset@snap")),
+		mcp.WithString("clone_name", mcp.Required(), mcp.Description("Target: pool/newdataset")),
+	), handleZSnapshotClone)
+	registerTool(s, toolWithArgs("zsnapshot_rollback", "Rollback a dataset to a previous snapshot state. Destroys intermediate snapshots.",
+		mcp.WithString("name", mcp.Required(), mcp.Description("Full snapshot path: pool/dataset@snap")),
+	), handleZSnapshotRollback)
+
+	// ── Hypervisor: GPU management (4) ──────────────────────────────────
+	registerTool(s, tool("gpu_list", "Detect and list all GPUs (NVIDIA, AMD, Intel iGPU) with PCI addresses, memory, driver, and VFIO passthrough status."), handleGPUList)
+	registerTool(s, toolWithArgs("gpu_stats", "Get real-time GPU utilization stats (GPU%, memory%, temperature, power, clocks). NVIDIA only.",
+		mcp.WithString("pci_address", mcp.Description("Filter by PCI bus address")),
+	), handleGPUStats)
+	registerTool(s, toolWithArgs("gpu_assign", "Assign a GPU to a VM via VFIO passthrough. Unbinds GPU from host driver, binds to vfio-pci, and attaches to VM domain. Requires IOMMU enabled in BIOS/kernel.",
+		mcp.WithString("pci_address", mcp.Required(), mcp.Description("GPU PCI address: 0000:01:00.0")),
+		mcp.WithString("vm_name", mcp.Required(), mcp.Description("Target VM name")),
+	), handleGPUAssign)
+	registerTool(s, toolWithArgs("gpu_release", "Release a GPU from a VM. Detaches VFIO device from VM domain and rebinds to host driver (nvidia/amdgpu/i915).",
+		mcp.WithString("pci_address", mcp.Required()),
+		mcp.WithString("vm_name", mcp.Required()),
+	), handleGPURelease)
 }

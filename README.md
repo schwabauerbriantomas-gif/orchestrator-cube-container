@@ -8,7 +8,7 @@
 
 A container orchestration platform controlled by AI through the Model Context Protocol. An MCP server that replaces the DevOps role — the operations interface is natural language, not YAML.
 
-129 tools covering the complete DevOps lifecycle: containers, images, deployments, scaling, health monitoring, networking, routing, secrets, backups, high availability, multi-node clusters, environments, notifications, scheduled jobs, database provisioning, certificates, and event streaming.
+158 tools covering the complete DevOps lifecycle: containers, images, deployments, scaling, health monitoring, networking, routing, secrets, backups, high availability, multi-node clusters, environments, notifications, scheduled jobs, database provisioning, certificates, event streaming, and **full hypervisor management** (VMs via KVM/libvirt, ZFS storage, GPU passthrough).
 
 ## Architecture
 
@@ -56,9 +56,9 @@ docker build -t cube-container .
 docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-container
 ```
 
-## Tool Reference (129 tools)
+## Tool Reference (158 tools)
 
-<!-- Tool count is verified by CI: `grep -c 'registerTool(s,' mcp-server-go/tools_registration.go` must equal 129. -->
+<!-- Tool count is verified by CI: `grep -c 'registerTool(s,' mcp-server-go/tools_registration.go` must equal 158. -->
 
 ### Cluster & Nodes (12)
 
@@ -313,6 +313,50 @@ These tools provide hardware-level isolation for running untrusted code. Each sa
 |------|-------------|------|
 | `events_list` | List events filtered by type/severity/time | viewer |
 | `events_recent` | Get 20 most recent cluster events | viewer |
+
+### Hypervisor: VM Lifecycle (13) — KVM/libvirt
+
+| Tool | Description | Role |
+|------|-------------|------|
+| `vm_list` | List all VMs (KVM/QEMU domains) with state, memory, vCPU | viewer |
+| `vm_get` | Get detailed VM info (state, IPs, autostart) | viewer |
+| `vm_create` | Create and start a new KVM VM (auto-generates qcow2 disk) | admin |
+| `vm_start` | Start a stopped VM | operator |
+| `vm_stop` | Shutdown VM (graceful or force) | operator |
+| `vm_pause` | Suspend a running VM (state preserved in memory) | operator |
+| `vm_resume` | Resume a paused VM | operator |
+| `vm_delete` | Permanently delete VM (undefine + optional disk removal) | admin |
+| `vm_snapshot_create` | Create a libvirt snapshot of a VM | operator |
+| `vm_snapshot_list` | List all snapshots for a VM | viewer |
+| `vm_snapshot_restore` | Revert VM to a previous snapshot | admin |
+| `vm_snapshot_delete` | Delete a VM snapshot | admin |
+| `vm_migrate` | Live or offline migration to another host | admin |
+
+### Hypervisor: ZFS Storage (12)
+
+| Tool | Description | Role |
+|------|-------------|------|
+| `zpool_list` | List ZFS pools with size, health, free space | viewer |
+| `zpool_create` | Create a new ZFS pool from block devices | admin |
+| `zpool_status` | Detailed pool health and vdev status | viewer |
+| `zpool_destroy` | Destroy a ZFS pool and all datasets | admin |
+| `zdataset_list` | List ZFS datasets with usage stats | viewer |
+| `zdataset_create` | Create a dataset with optional compression/recordsize | admin |
+| `zdataset_destroy` | Destroy a dataset and its snapshots | admin |
+| `zsnapshot_create` | Instant ZFS snapshot (near-zero cost, CoW) | operator |
+| `zsnapshot_list` | List ZFS snapshots with usage and creation time | viewer |
+| `zsnapshot_destroy` | Destroy a ZFS snapshot | admin |
+| `zsnapshot_clone` | Clone snapshot into new writable dataset | operator |
+| `zsnapshot_rollback` | Rollback dataset to snapshot (destroys intermediate) | admin |
+
+### Hypervisor: GPU Management (4)
+
+| Tool | Description | Role |
+|------|-------------|------|
+| `gpu_list` | Detect all GPUs (NVIDIA, AMD, Intel iGPU) with PCI/VFIO status | viewer |
+| `gpu_stats` | Real-time GPU utilization (GPU%, mem%, temp, power, clocks) | viewer |
+| `gpu_assign` | Assign GPU to VM via VFIO passthrough (requires IOMMU) | admin |
+| `gpu_release` | Release GPU from VM, rebind to host driver | admin |
 
 ## Security
 
