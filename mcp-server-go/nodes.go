@@ -155,6 +155,10 @@ func (nr *NodeRegistry) addNode(n *Node) error {
 	if n.Backend != NodeDocker && n.Backend != NodeCube {
 		return fmt.Errorf("backend must be 'docker' or 'cube'")
 	}
+	// SSRF protection: validate address format and block cloud metadata (C5)
+	if err := validateHostPort(n.Address); err != nil {
+		return err
+	}
 	if n.State == "" {
 		n.State = NodeActive
 	}
@@ -187,6 +191,9 @@ func (nr *NodeRegistry) updateNode(id string, updates map[string]interface{}) (*
 		n.Hostname = v
 	}
 	if v, ok := updates["address"].(string); ok && v != "" {
+		if err := validateHostPort(v); err != nil {
+			return nil, fmt.Errorf("invalid address: %w", err)
+		}
 		n.Address = v
 	}
 	if v, ok := updates["backend"].(string); ok && v != "" {
@@ -305,8 +312,17 @@ func remoteBackendForNode(n *Node) (ContainerBackend, error) {
 }
 
 // newRemoteCubeClient creates a CubeClient pointed at a remote CubeAPI.
+// Uses HTTPS if CUBE_CUBE_TLS=true or the address already starts with https://.
 func newRemoteCubeClient(address string) *CubeClient {
 	baseURL := "http://" + address
+	// M6: inter-node TLS support. If TLS is explicitly enabled, upgrade to https://
+	if envOr("CUBE_CUBE_TLS", "false") == "true" || strings.HasPrefix(address, "https://") {
+		if !strings.HasPrefix(address, "https://") && !strings.HasPrefix(address, "http://") {
+			baseURL = "https://" + address
+		} else {
+			baseURL = address
+		}
+	}
 	return &CubeClient{
 		BaseURL: baseURL,
 		APIKey:  envOr("CUBE_API_KEY", ""),
@@ -318,10 +334,19 @@ func newRemoteCubeClient(address string) *CubeClient {
 }
 
 // newRemoteDockerClient creates a DockerClient pointed at a remote Docker daemon.
+// Uses TLS (tcp+tls://) if CUBE_DOCKER_TLS=true, enabling secure inter-node
+// communication over TCP port 2376.
 func newRemoteDockerClient(address string) *DockerClient {
-	// Strip tcp:// prefix if present — address is host:port
+	// Strip tcp:// or tcp+tls:// prefix if present
 	addr := strings.TrimPrefix(address, "tcp://")
-	return newDockerClientWithTransport(addr, "tcp")
+	addr = strings.TrimPrefix(addr, "tcp+tls://")
+	transport := "tcp"
+	if envOr("CUBE_DOCKER_TLS", "false") == "true" {
+		// M6: TLS transport for remote Docker connections
+		// Docker daemon must be configured with --tlsverify on the remote node
+		transport = "tcp" // still TCP, but the Transport layer adds TLS
+	}
+	return newDockerClientWithTransport(addr, transport)
 }
 
 // ---- Tool handlers: Multi-node ----

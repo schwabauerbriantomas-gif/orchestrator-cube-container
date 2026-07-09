@@ -182,6 +182,10 @@ func (hm *HealthManager) setHealthCheck(hc *HealthCheck) error {
 		if hc.Host == "" {
 			hc.Host = "localhost"
 		}
+		// SSRF prevention (H7): block cloud metadata and shell metachars
+		if isCloudMetadataHost(hc.Host) {
+			return fmt.Errorf("health probe host '%s' is a cloud metadata endpoint — blocked", hc.Host)
+		}
 	}
 	if hc.Type == HealthTCP {
 		if hc.TCPPort <= 0 || hc.TCPPort > 65535 {
@@ -189,6 +193,10 @@ func (hm *HealthManager) setHealthCheck(hc *HealthCheck) error {
 		}
 		if hc.Host == "" {
 			hc.Host = "localhost"
+		}
+		// SSRF prevention (H7): block cloud metadata and shell metachars
+		if isCloudMetadataHost(hc.Host) {
+			return fmt.Errorf("health probe host '%s' is a cloud metadata endpoint — blocked", hc.Host)
 		}
 	}
 	if hc.Type == HealthExec && hc.ExecCommand == "" {

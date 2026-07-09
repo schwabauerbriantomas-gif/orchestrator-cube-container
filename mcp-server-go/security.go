@@ -319,3 +319,157 @@ func isGitInstalled() bool {
 	_, err := exec.LookPath("git")
 	return err == nil
 }
+
+// isCloudMetadataHost returns true for known cloud metadata endpoints.
+// Unlike isPrivateHost, this ONLY blocks metadata IPs — safe for cluster
+// nodes that legitimately use private ranges (RFC 1918).
+func isCloudMetadataHost(host string) bool {
+	host = strings.TrimSpace(host)
+	// Strip port if present
+	if strings.Contains(host, ":") {
+		host = strings.SplitN(host, ":", 2)[0]
+	}
+	if host == "169.254.169.254" || host == "metadata.google.internal" || host == "metadata" {
+		return true
+	}
+	// 169.254.0.0/16 link-local (includes cloud metadata on most platforms)
+	parts := strings.Split(host, ".")
+	if len(parts) == 4 {
+		var o [4]int
+		valid := true
+		for i, p := range parts {
+			n := 0
+			for _, c := range p {
+				if c < '0' || c > '9' {
+					valid = false
+					break
+				}
+				n = n*10 + int(c-'0')
+			}
+			if !valid || n > 255 {
+				valid = false
+				break
+			}
+			o[i] = n
+		}
+		if valid && o[0] == 169 && o[1] == 254 {
+			return true
+		}
+	}
+	return false
+}
+
+// validateHostPort validates that a string is a safe host:port pair.
+// Blocks cloud metadata endpoints (C5). Allows private ranges for cluster nodes.
+func validateHostPort(addr string) error {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return fmt.Errorf("address cannot be empty")
+	}
+	// Must contain at least one colon (host:port)
+	if !strings.Contains(addr, ":") {
+		return fmt.Errorf("address must be in host:port format")
+	}
+	host := strings.SplitN(addr, ":", 2)[0]
+	if host == "" {
+		return fmt.Errorf("host part cannot be empty")
+	}
+	if isCloudMetadataHost(host) {
+		return fmt.Errorf("address points to cloud metadata endpoint '%s' — blocked for security", host)
+	}
+	// Reject embedded shell metacharacters in the full address
+	if strings.ContainsAny(addr, "`$\\\"'{};|&<>()") {
+		return fmt.Errorf("address contains forbidden characters")
+	}
+	return nil
+}
+
+// validateContainerID ensures a string is a safe container ID / image ID.
+// Prevents argument injection into CLI commands (e.g. "--flag" as container ID).
+// Container IDs from Docker are hex hashes; Cube uses alphanumeric IDs.
+var containerIDRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+
+func validateContainerID(id string) error {
+	if id == "" {
+		return fmt.Errorf("container_id cannot be empty")
+	}
+	if strings.HasPrefix(id, "-") {
+		return fmt.Errorf("container_id starts with '-' — possible argument injection attempt")
+	}
+	if !containerIDRe.MatchString(id) {
+		return fmt.Errorf("invalid container_id '%s': must be alphanumeric with dots, dashes, or underscores (max 128 chars)", id)
+	}
+	return nil
+}
+
+// sensitiveMountPaths lists host paths that must never be used as a container
+// mount path inside a container. Prevents container escape via path traversal.
+var sensitiveMountPaths = []string{
+	"/etc", "/etc/",
+	"/var/run", "/var/run/", "/run", "/run/",
+	"/proc", "/proc/", "/sys", "/sys/",
+	"/dev", "/dev/",
+	"/root", "/root/",
+	"/boot", "/boot/",
+	"/usr/lib", "/usr/lib64", "/usr/bin",
+	"/.dockerenv",
+	"/var/lib/docker", "/var/lib/docker/",
+}
+
+// validateMountPath ensures a mount path is safe — not a sensitive host path
+// and doesn't escape via traversal (H8).
+func validateMountPath(path string) error {
+	if path == "" {
+		return fmt.Errorf("mount_path cannot be empty")
+	}
+	// Reject path traversal
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("mount_path contains '..' — path traversal not allowed")
+	}
+	// Normalize for comparison
+	cleaned := filepath.Clean(path)
+	for _, sensitive := range sensitiveMountPaths {
+		if cleaned == sensitive || strings.HasPrefix(cleaned, sensitive) {
+			return fmt.Errorf("mount_path '%s' is a sensitive system path — not allowed", path)
+		}
+	}
+	// Must be absolute
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("mount_path must be an absolute path")
+	}
+	// Reject shell metacharacters
+	if strings.ContainsAny(path, "`$\\\"'{};|&<>()") {
+		return fmt.Errorf("mount_path contains forbidden characters")
+	}
+	return nil
+}
+
+// validateWebhookURL ensures a webhook URL points to a safe destination.
+// Blocks private/internal hosts to prevent SSRF (H6).
+func validateWebhookURL(url string) error {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return fmt.Errorf("webhook URL cannot be empty")
+	}
+	if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
+		return fmt.Errorf("webhook URL must start with http:// or https://")
+	}
+	// Extract host
+	var hostPart string
+	if strings.HasPrefix(url, "https://") {
+		hostPart = url[8:]
+	} else {
+		hostPart = url[7:]
+	}
+	// Strip path
+	if idx := strings.Index(hostPart, "/"); idx >= 0 {
+		hostPart = hostPart[:idx]
+	}
+	// Strip port
+	host := strings.SplitN(hostPart, ":", 2)[0]
+	// SSRF protection: block private/internal/cloud-metadata hosts
+	if isPrivateHost(host) {
+		return fmt.Errorf("webhook URL points to private/internal host '%s' — SSRF protection blocks this", host)
+	}
+	return nil
+}

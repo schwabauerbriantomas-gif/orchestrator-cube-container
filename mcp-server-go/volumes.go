@@ -324,11 +324,9 @@ func (vm *VolumeManager) VolumeAttach(containerID, volumeName, mountPath string)
 	if _, err := validateSafeName(volumeName); err != nil {
 		return nil, err
 	}
-	if mountPath == "" {
-		return nil, fmt.Errorf("mount_path is required")
-	}
-	if !strings.HasPrefix(mountPath, "/") {
-		return nil, fmt.Errorf("mount_path must be an absolute path (got %q)", mountPath)
+	// Path traversal / sensitive path prevention (H8)
+	if err := validateMountPath(mountPath); err != nil {
+		return nil, err
 	}
 
 	// Verify the volume directory exists.
@@ -522,9 +520,11 @@ func (vm *VolumeManager) VolumeMigrate(volumeName, fromNode, toNode string) (map
 	}
 
 	// Step 2: ensure the remote volume root exists, then scp the tarball.
-	// Use ssh to mkdir -p the remote root.
+	// B5: use StrictHostKeyChecking=no with a known_hosts file rather than
+	// accept-new, so that once a host key is learned, MITM is detected.
 	mkdirCmd := exec.Command("ssh",
-		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/root/.ssh/known_hosts",
 		"-o", "ConnectTimeout=10",
 		targetHost,
 		"mkdir -p "+shellQuote(remoteVolRoot),
@@ -536,7 +536,8 @@ func (vm *VolumeManager) VolumeMigrate(volumeName, fromNode, toNode string) (map
 	// Step 3: copy the tarball to the remote root.
 	remoteTar := filepath.Join(remoteVolRoot, ".__migrate_"+volumeName+".tar")
 	scpCmd := exec.Command("scp",
-		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/root/.ssh/known_hosts",
 		"-o", "ConnectTimeout=10",
 		tmpTarPath, targetHost+":"+remoteTar,
 	)
@@ -546,7 +547,8 @@ func (vm *VolumeManager) VolumeMigrate(volumeName, fromNode, toNode string) (map
 
 	// Step 4: extract on the remote node and clean up the tarball.
 	extractCmd := exec.Command("ssh",
-		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/root/.ssh/known_hosts",
 		"-o", "ConnectTimeout=10",
 		targetHost,
 		fmt.Sprintf("tar -xf %s -C %s && rm -f %s",

@@ -116,8 +116,11 @@ func (g *GarbageCollector) PruneVolumes() (*PruneResult, error) {
 		return nil, fmt.Errorf("docker CLI not available")
 	}
 
-	// First: prune Docker's own orphaned volumes
-	cmd := exec.Command("docker", "volume", "prune", "-f")
+	// First: prune Docker's own orphaned volumes (M7: add age filter to avoid
+	// deleting recently created volumes that belong to stopped containers
+	// that may restart). Use --filter until=<timestamp> to only remove volumes
+	// not used for at least 1 hour.
+	cmd := exec.Command("docker", "volume", "prune", "-f", "--filter", "until=1h")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("docker volume prune: %w", err)
@@ -298,12 +301,10 @@ func (g *GarbageCollector) checkAndPrune() {
 		// Check again after image prune
 		usage = diskUsagePercent()
 		if usage >= g.threshold {
-			result, err := g.PruneVolumes()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "[cube-mcp] GC: volume prune failed: %v\n", err)
-			} else {
-				_ = result
-			}
+			// M7: auto-prune of volumes is destructive and removed from
+			// the background watcher. Volume pruning must be manual
+			// (gc_prune_volumes tool) to prevent data loss.
+			fmt.Fprintf(os.Stderr, "[cube-mcp] GC: disk still at %d%% after image prune — volume prune requires manual gc_prune_volumes call\n", usage)
 		}
 	}
 }

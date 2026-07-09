@@ -118,6 +118,10 @@ func (rm *ResourceManager) SetLimits(containerID string, memoryMB int, cpuCores 
 	if containerID == "" {
 		return fmt.Errorf("container_id is required")
 	}
+	// Argument injection prevention (C6): validate container_id is safe
+	if err := validateContainerID(containerID); err != nil {
+		return err
+	}
 
 	if !dockerAvailable() {
 		// For Cube backend, limits were applied at creation time.
@@ -168,6 +172,10 @@ func (rm *ResourceManager) storePolicy(containerID string, memoryMB int, cpuCore
 func (rm *ResourceManager) GetUsage(containerID string) (*ContainerUsage, error) {
 	if containerID == "" {
 		return nil, fmt.Errorf("container_id is required")
+	}
+	// Argument injection prevention (C6)
+	if err := validateContainerID(containerID); err != nil {
+		return nil, err
 	}
 	if !dockerAvailable() {
 		return nil, fmt.Errorf("docker CLI not available (Cube backend limits are set at creation time)")

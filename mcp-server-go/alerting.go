@@ -358,6 +358,10 @@ func (am *AlertManager) dispatch(event *AlertEvent, rule *AlertRule) error {
 		fmt.Fprintf(os.Stderr, "[cube-mcp] ALERT (no webhook): %+v\n", event)
 		return nil
 	}
+	// SSRF prevention (H6): validate webhook URL before connecting
+	if err := validateWebhookURL(url); err != nil {
+		return fmt.Errorf("webhook URL rejected: %w", err)
+	}
 
 	payload, err := json.Marshal(event)
 	if err != nil {
