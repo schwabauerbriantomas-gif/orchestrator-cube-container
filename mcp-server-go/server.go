@@ -141,6 +141,7 @@ func main() {
 	}
 
 	// ---- Phase 2 managers (DevOps-complete feature set) ----
+	secureSandboxMgr = newSecureSandboxManager(client)
 	imageMgr = newImageManager(client)
 	rolloutMgr = newRolloutManager(client)
 	logAggMgr = newLogAggregationManager(client)
@@ -768,6 +769,41 @@ func registerAllTools(s *server.MCPServer) {
 		mcp.WithNumber("limit", mcp.Description("Max results (default 50)")),
 	), handleEventsList)
 	s.AddTool(tool("events_recent", "Get the 20 most recent cluster events across all types."), handleEventsRecent)
+
+	// --- Secure sandbox (8) — KVM-isolated untrusted code execution ---
+	// These tools only work with Cube backend (CUBE_BACKEND=cube).
+	// Docker containers share the host kernel and cannot provide KVM isolation.
+	s.AddTool(toolWithArgs("secure_sandbox_create", "Create a KVM-isolated sandbox for untrusted code. Each sandbox runs its own guest kernel — kernel escape is impossible. Supports egress filtering (domain allowlist/blocklist) and credential vault (API keys injected by proxy, never visible to sandbox code). Requires Cube backend. Args: template_id (required), memory_mb (default 512), cpu_count (default 1.0), egress_allowlist (domains the sandbox can reach), egress_blocklist (domains to block), credential_vault (map of domain→API key, injected on egress), max_lifetime_seconds (auto-pause after N seconds), network_disabled (bool, most secure).",
+		mcp.WithString("template_id", mcp.Required()),
+		mcp.WithNumber("memory_mb", mcp.Description("Memory limit in MB (default 512)")),
+		mcp.WithNumber("cpu_count", mcp.Description("CPU cores (default 1.0)")),
+	), handleSecureSandboxCreate)
+	s.AddTool(toolWithArgs("secure_sandbox_exec", "Execute a command inside a secure sandbox. The command runs in the KVM-isolated environment with egress filtering enforced. Max timeout 300s for untrusted code. Args: sandbox_id (required), command (required), timeout_seconds (default 30, max 300).",
+		mcp.WithString("sandbox_id", mcp.Required()),
+		mcp.WithString("command", mcp.Required()),
+		mcp.WithNumber("timeout_seconds", mcp.Description("Max execution time (default 30, max 300)")),
+	), handleSecureSandboxExec)
+	s.AddTool(toolWithArgs("secure_sandbox_egress_add", "Add a network egress rule to a secure sandbox. Only domains in the allowlist can be reached from inside the sandbox. Args: sandbox_id (required), domain (required), action (allow|block, required).",
+		mcp.WithString("sandbox_id", mcp.Required()),
+		mcp.WithString("domain", mcp.Required()),
+		mcp.WithString("action", mcp.Required(), mcp.Description("allow or block")),
+	), handleSecureSandboxEgressAdd)
+	s.AddTool(toolWithArgs("secure_sandbox_egress_list", "List all egress rules for a secure sandbox.",
+		mcp.WithString("sandbox_id", mcp.Required()),
+	), handleSecureSandboxEgressList)
+	s.AddTool(toolWithArgs("secure_sandbox_egress_remove", "Remove an egress rule from a secure sandbox.",
+		mcp.WithString("rule_id", mcp.Required()),
+	), handleSecureSandboxEgressRemove)
+	s.AddTool(toolWithArgs("secure_sandbox_snapshot", "Create a CubeCoW snapshot of a secure sandbox. Allows instant rollback to a known-good state. Copy-on-Write means snapshots are near-instant and minimal storage. Args: sandbox_id (required).",
+		mcp.WithString("sandbox_id", mcp.Required()),
+	), handleSecureSandboxSnapshot)
+	s.AddTool(toolWithArgs("secure_sandbox_restore", "Restore a secure sandbox to a previous snapshot. Rolls back the entire sandbox state (filesystem + memory) to the snapshot point. Args: sandbox_id (required), snapshot_id (required).",
+		mcp.WithString("sandbox_id", mcp.Required()),
+		mcp.WithString("snapshot_id", mcp.Required()),
+	), handleSecureSandboxRestore)
+	s.AddTool(toolWithArgs("secure_sandbox_list", "List all secure sandboxes with status, egress policy, and expiry.",
+		mcp.WithString("state", mcp.Description("Filter: running, paused, stopped")),
+	), handleSecureSandboxList)
 }
 
 // ---- Tool builders ----
@@ -879,7 +915,7 @@ func handleBackendInfo(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolR
 			"environments", "notifications", "auth_tokens", "scheduled_jobs",
 			"metrics_query", "database_provisioning", "certificates", "events",
 		},
-		"tool_count": 121,
+		"tool_count": 129,
 	}
 	return okResult(info), nil
 }

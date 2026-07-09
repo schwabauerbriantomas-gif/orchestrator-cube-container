@@ -1,7 +1,7 @@
 # Cube Container
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
-[![MCP Server](https://img.shields.io/badge/MCP-121%20tools-orange)](https://modelcontextprotocol.io)
+[![MCP Server](https://img.shields.io/badge/MCP-129%20tools-orange)](https://modelcontextprotocol.io)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8)](https://go.dev)
 [![Security Audit](https://img.shields.io/badge/Security-35%20issues%20fixed-red)](#security)
 [![Tests](https://img.shields.io/badge/Tests-43%20passing-brightgreen)](#testing)

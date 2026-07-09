@@ -16,6 +16,46 @@ When hosting code from third parties, the threats are:
 
 Standard Docker containers share the host kernel — they rely on namespaces and cgroups for isolation, not hardware virtualization. A kernel vulnerability (like Dirty Pipe CVE-2022-0847) can bypass all container isolation.
 
+## ⭐ Recommended: Cube KVM Backend (Already Integrated)
+
+**CubeSandbox's KVM backend is the native solution — no additional software needed.**
+
+The Cube backend (`CUBE_BACKEND=cube`) creates sandboxes using KVM + rust-vmm,
+providing hardware-level isolation with sub-60ms boot times and <5MB memory
+overhead per instance. Each sandbox runs its own guest kernel.
+
+### Features Available Through MCP (129 tools)
+
+| Feature | Tool | What It Does |
+|---------|------|-------------|
+| **KVM sandbox** | `secure_sandbox_create` | Creates isolated VM with own kernel |
+| **Egress control** | `secure_sandbox_egress_add/list/remove` | Domain allowlist/blocklist per sandbox |
+| **Credential vault** | `credential_vault` param | API keys injected by proxy, never in sandbox |
+| **CubeCoW snapshots** | `secure_sandbox_snapshot/restore` | Instant rollback to known-good state |
+| **Time limits** | `max_lifetime_seconds` param | Auto-pause after N seconds |
+| **Network kill** | `network_disabled` param | Zero network access |
+
+### Why This Beats External Solutions
+
+- **No KVM setup needed** — CubeSandbox already manages it
+- **<5MB overhead** vs 32-128MB for Firecracker/Kata
+- **<60ms boot** — same class as Firecracker
+- **CubeEgress proxy** — credential vault is unique to CubeSandbox
+- **CubeCoW** — snapshot/restore is near-instant
+
+### When to Use External Solutions Instead
+
+| Scenario | Use |
+|----------|-----|
+| **Cube backend available** | ✅ Cube KVM (native, best option) |
+| Docker-only, need mild isolation | gVisor (Level 2) |
+| Need OCI compatibility + VM isolation | Kata Containers (Level 3) |
+| Building FaaS/serverless platform | Firecracker-containerd (Level 4) |
+
+---
+
+## Alternative Options (If Cube Backend Is Not Available)
+
 ## Isolation Levels
 
 | Level | Technology | Isolation Strength | Performance Overhead | Complexity |

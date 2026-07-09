@@ -186,6 +186,15 @@ var toolPermissions = map[string]Role{
 	// Events — viewer
 	"events_list":   RoleViewer,
 	"events_recent": RoleViewer,
+	// Secure sandbox — admin to create/restore, operator to exec/egress/snapshot, viewer to list
+	"secure_sandbox_create":         RoleAdmin,
+	"secure_sandbox_exec":           RoleOperator,
+	"secure_sandbox_egress_add":     RoleAdmin,
+	"secure_sandbox_egress_list":    RoleViewer,
+	"secure_sandbox_egress_remove":  RoleAdmin,
+	"secure_sandbox_snapshot":       RoleOperator,
+	"secure_sandbox_restore":        RoleAdmin,
+	"secure_sandbox_list":           RoleViewer,
 }
 
 // roleLevel returns a numeric level for comparison (higher = more permissions).
