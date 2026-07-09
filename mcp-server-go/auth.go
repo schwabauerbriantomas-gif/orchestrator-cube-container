@@ -61,6 +61,11 @@ var toolPermissions = map[string]Role{
 	"update_code":       RoleOperator,
 	// Destructive — admin
 	"delete_volume":     RoleAdmin,
+	// Volume lifecycle — operator to attach/detach/info, admin to migrate
+	"volume_attach":  RoleOperator,
+	"volume_detach":  RoleOperator,
+	"volume_migrate": RoleAdmin,
+	"volume_info":    RoleViewer,
 	// Backup — operator to create/list, admin to delete/restore
 	"backup_volume":     RoleOperator,
 	"backup_container":  RoleOperator,

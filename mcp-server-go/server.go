@@ -103,6 +103,9 @@ func main() {
 	// Service discovery — logical name → endpoint registry
 	discoveryMgr = newDiscoveryManager()
 
+	// Volume lifecycle — attach/detach/migrate beyond basic create/delete
+	volumeMgr = newVolumeManager(deploy, client)
+
 	// Secrets manager (optional — degrades gracefully if key unavailable)
 	sm, err := newSecretsManager()
 	if err != nil {
@@ -343,6 +346,25 @@ func registerAllTools(s *server.MCPServer) {
 	s.AddTool(toolWithArgs("delete_volume", "Delete a persistent volume. WARNING: destroys all data permanently.",
 		mcp.WithString("name", mcp.Required()),
 	), handleDeleteVolume)
+
+	// --- Volume lifecycle: attach/detach/migrate/info (4) ---
+	s.AddTool(toolWithArgs("volume_attach", "Attach a persistent volume to a running container at a specified mount path.",
+		mcp.WithString("container_id", mcp.Required()),
+		mcp.WithString("volume_name", mcp.Required()),
+		mcp.WithString("mount_path", mcp.Required()),
+	), handleVolumeAttach)
+	s.AddTool(toolWithArgs("volume_detach", "Detach a volume from a container. The volume data is preserved.",
+		mcp.WithString("container_id", mcp.Required()),
+		mcp.WithString("volume_name", mcp.Required()),
+	), handleVolumeDetach)
+	s.AddTool(toolWithArgs("volume_migrate", "Migrate a volume from this node to a remote node via tar+scp. Requires SSH access to the target node.",
+		mcp.WithString("volume_name", mcp.Required()),
+		mcp.WithString("from_node", mcp.Description("Source node (default: this node)")),
+		mcp.WithString("to_node", mcp.Required(), mcp.Description("Target node host:port")),
+	), handleVolumeMigrate)
+	s.AddTool(toolWithArgs("volume_info", "Get detailed volume info: size, file count, attached containers.",
+		mcp.WithString("volume_name", mcp.Required()),
+	), handleVolumeInfo)
 
 	// --- Backup & Restore (5) ---
 	s.AddTool(toolWithArgs("backup_volume", "Create a tar.gz backup of a volume with SHA256 integrity check. Backup is stored locally and can be restored later.",
