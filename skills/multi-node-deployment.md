@@ -50,6 +50,7 @@ Health probes are cluster-wide — `health_check_list` shows status for containe
 - **`volume_migrate` fails** → SSH connectivity or permissions. The master must SSH to the target as a user with write access to the volume root. Check `CUBE_NODE_TLS_*` env vars if inter-node TLS is enabled. Do not retry blindly — a partial migration can leave a corrupt volume. `volume_info` on both sides to assess.
 - **Node disappears (hardware failure)** → `list_nodes` will show it `offline`. Its containers are lost. Recover from backup: `list_backups`, `restore_backup` to a healthy node. If HA is configured, check `ha_state`.
 - **Containers stuck after node drain** → `node_update` to draining doesn't migrate containers, it only stops new placements. You must explicitly `volume_migrate` + `deploy_to_node` to relocate them.
+- **Plaintext inter-node traffic** → by default, remote Docker connections are plaintext. In production, set `CUBE_DOCKER_TLS=true` (AS-4). The server prints a stderr warning when plaintext is used. Volume migrations via SSH (`volume_migrate`) are already encrypted by SSH.
 
 ## Example Session
 

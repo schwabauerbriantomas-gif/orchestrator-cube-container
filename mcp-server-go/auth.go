@@ -507,10 +507,11 @@ func (al *AuditLogger) Log(entry AuditEntry) {
 	al.prevHash = entry.Hash
 }
 
-// computeAuditHash creates a SHA256 chain: hash(prev_hash + entry fields).
+// computeAuditHash creates an HMAC-SHA256 chain: hmac(key, prev_hash + entry fields).
 // AUDIT FIX M-01: Added Tool and Reason to the hash payload so that tampering
-// with either field is detectable by VerifyAuditChain. Previously an attacker
-// could change "delete_volume" → "list_volumes" without breaking the chain.
+// with either field is detectable by VerifyAuditChain.
+// AS-7: Upgraded from plain SHA-256 to HMAC-SHA256 keyed with the secrets key,
+// making the chain tamper-proof against full-file rewrites (not just partial).
 func computeAuditHash(entry AuditEntry) string {
 	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%d|%s|%v|%s|%s|%s",
 		entry.Timestamp, entry.Key, entry.Role,
@@ -518,9 +519,20 @@ func computeAuditHash(entry AuditEntry) string {
 		entry.Duration, entry.Allowed, entry.PrevHash,
 		entry.Tool, entry.Reason,
 	)
+	// AS-7: Use HMAC-SHA256 if a key is available, otherwise fall back to SHA-256
+	// for backwards compatibility with existing audit logs.
+	if auditMACKey != nil {
+		h := hmac.New(sha256.New, auditMACKey)
+		h.Write([]byte(payload))
+		return hex.EncodeToString(h.Sum(nil))
+	}
 	h := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(h[:])
 }
+
+// auditMACKey is the HMAC key for the audit hash chain (AS-7).
+// Derived from CUBE_SECRETS_KEY or CUBE_SECRETS_PASSPHRASE at startup.
+var auditMACKey []byte
 
 // VerifyAuditChain reads an audit log file and verifies hash integrity.
 func VerifyAuditChain(path string) (int, error) {

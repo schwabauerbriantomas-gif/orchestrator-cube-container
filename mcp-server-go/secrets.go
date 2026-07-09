@@ -476,6 +476,21 @@ func (sm *SecretsManager) getGCM() (cipher.AEAD, error) {
 	return sm.cachedGCM, nil
 }
 
+// getSecretsKeyForAudit returns the AES encryption key for use as HMAC key
+// in the audit hash chain (AS-7). Returns nil if secrets are not initialized.
+func getSecretsKeyForAudit() []byte {
+	if secretsMgr == nil {
+		return nil
+	}
+	if len(secretsMgr.encryptionKey) == 0 {
+		return nil
+	}
+	// Return a copy to prevent external mutation
+	key := make([]byte, len(secretsMgr.encryptionKey))
+	copy(key, secretsMgr.encryptionKey)
+	return key
+}
+
 // ---- Audit redaction ----
 
 // RedactSecretValue clones the given args map and replaces any "value" key

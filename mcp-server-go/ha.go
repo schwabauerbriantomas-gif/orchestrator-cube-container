@@ -24,6 +24,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -114,6 +115,8 @@ type HAManager struct {
 
 	sharedSecret string // HMAC pre-shared key for heartbeat auth (M1)
 
+	heartbeatRate *rateLimiter // AS-6: per-source rate limiting on heartbeat endpoint
+
 	mu sync.RWMutex
 }
 
@@ -190,6 +193,7 @@ func newHAManager() *HAManager {
 		startedAt:         now,
 		lastHeartbeat:     now, // optimistic: don't immediately trip failover at boot
 		sharedSecret:      secret,
+		heartbeatRate:     newRateLimiter(60, time.Minute), // AS-6: 60 heartbeats/min per source IP
 	}
 
 	// If we start active, we are the active node.
@@ -247,6 +251,16 @@ func (m *HAManager) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// AS-6: Rate limit heartbeat endpoint to prevent flooding
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if ip == "" {
+		ip = r.RemoteAddr
+	}
+	if m.heartbeatRate != nil && !m.heartbeatRate.Allow(ip) {
+		http.Error(w, "heartbeat rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
 
@@ -346,15 +360,6 @@ func (m *HAManager) HandleHAGetState(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(m.State())
-}
-
-// registerRoutes wires the HA HTTP endpoints onto the server's mux.
-func (m *HAManager) registerRoutes(mux *http.ServeMux) {
-	if m == nil || mux == nil {
-		return
-	}
-	mux.HandleFunc("/ha/heartbeat", m.HandleHeartbeat)
-	mux.HandleFunc("/ha/state", m.HandleHAGetState)
 }
 
 // ---- Role transitions ----

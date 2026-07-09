@@ -12,6 +12,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -20,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 // ---- Types ----
@@ -255,15 +258,53 @@ func (jm *JobManager) executeJob(job *Job) {
 		return
 	}
 
-	// TODO: actually call the tool. For now we record that it would run.
-	// The actual tool execution would require calling the MCP server's
-	// internal handler, which needs the server instance. This is a design
-	// tradeoff: jobs record intent and the scheduler can be extended to
-	// call tools via an internal tool executor.
+	// Look up the tool handler in the registry
+	handler, ok := toolHandlerRegistry[job.Tool]
+	if !ok {
+		jm.mu.Lock()
+		job.LastStatus = "error"
+		job.LastError = fmt.Sprintf("tool '%s' not found in handler registry", job.Tool)
+		job.NextRun = time.Now().UTC().Add(interval)
+		_ = jm.saveToDisk()
+		jm.mu.Unlock()
+		return
+	}
+
+	// Build a CallToolRequest from the job's stored args
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = job.Args
+	if req.Params.Arguments == nil {
+		req.Params.Arguments = make(map[string]interface{})
+	}
+
+	// Execute the tool handler
+	result, err := handler(context.Background(), req)
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	} else if result != nil && result.IsError {
+		// Extract text from the error result
+		for _, c := range result.Content {
+			if tc, ok := c.(mcp.TextContent); ok {
+				if errMsg == "" {
+					errMsg = tc.Text
+				} else {
+					errMsg += "; " + tc.Text
+				}
+			}
+		}
+	}
+
 	jm.mu.Lock()
 	job.RunCount++
-	job.LastStatus = "success"
 	job.NextRun = time.Now().UTC().Add(interval)
+	if errMsg != "" {
+		job.LastStatus = "error"
+		job.LastError = errMsg
+	} else {
+		job.LastStatus = "success"
+		job.LastError = ""
+	}
 	_ = jm.saveToDisk()
 	jm.mu.Unlock()
 }

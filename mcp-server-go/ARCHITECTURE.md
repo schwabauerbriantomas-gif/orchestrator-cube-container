@@ -7,7 +7,7 @@
 ## Overview
 
 Cube Container is a container orchestration platform controlled entirely through
-MCP (Model Context Protocol). An AI agent communicates with it using 121 tools.
+MCP (Model Context Protocol). An AI agent communicates with it using 129 tools.
 There is no CLI, no web UI — the operations interface IS natural language.
 
 ```
@@ -15,14 +15,14 @@ There is no CLI, no web UI — the operations interface IS natural language.
 │ AI Agent │ ──► │ MCP Server (Go)                          │ ──► │ Backend  │
 │ (Claude, │     │                                          │     │ Docker / │
 │  GPT...) │     │  ┌─────────┐  ┌──────────┐  ┌────────┐  │     │ Cube     │
-│          │ ◄── │  │ 121     │  │ Auth +   │  │ 11     │  │     │ Engine   │
+│          │ ◄── │  │ 129     │  │ Auth +   │  │ 11     │  │     │ Engine   │
 │          │     │  │ Tools   │  │ RBAC +   │  │ Watch  │  │     │          │
 │          │     │  │         │  │ Rate     │  │ Loops  │  │     └──────────┘
-└──────────┘     │  └─────────┘  │ Limit +  │  └────────┘  │
-                 │               │ Audit    │              │     ┌──────────┐
-                 │               └──────────┘              │ ──► │ Caddy    │
-                 │                 stdio / HTTP             │     │ TLS+WAF  │
-                 └──────────────────────────────────────────┘     └──────────┘
+│          │     │  └─────────┘  │ Limit +  │  └────────┘  │
+│          │     │               │ Audit    │              │     ┌──────────┐
+│          │     │               └──────────┘              │ ──► │ Caddy    │
+│          │     │                 stdio / HTTP             │     │ TLS+WAF  │
+│          │     └──────────────────────────────────────────┘     └──────────┘
 ```
 
 ## Code Organization
@@ -35,13 +35,16 @@ Every `.go` file falls into exactly one of these categories:
 
 | File | Responsibility |
 |------|---------------|
-| `server.go` | `main()`, tool registration (`registerAllTools`), handler dispatchers, arg/result helpers |
+| `server.go` | `main()`, manager initialization, HTTP middleware, stdio/HTTP mode |
+| `tools_registration.go` | Tool registration (`registerAllTools`), all 129 `registerTool` calls |
+| `tools_helpers.go` | Tool builders, arg extraction, handler registry (for scheduled jobs) |
+| `handlers_basic.go` | Handlers for cluster, containers, templates, deploy, volumes, backup |
+| `handlers_phase2.go` | Handlers for images, deploy rollout, logs, envs, jobs, DBs, certs, events |
+| `handlers_secure.go` | Handlers for secure sandbox operations |
 
-**Pattern**: To add a new tool, you touch this file in 2 places:
-1. `registerAllTools()` — register the tool with `s.AddTool(tool(...), handleX)`
-2. End of file — implement `func handleX(ctx, req) (*mcp.CallToolResult, error)`
-
-Or put handlers in `handlers_phase2.go` (Phase 2 pattern — keeps server.go manageable).
+**Pattern**: To add a new tool, you touch these files:
+1. `tools_registration.go` — register the tool with `registerTool(s, tool(...), handleX)`
+2. `handlers_basic.go` or `handlers_phase2.go` — implement `func handleX(ctx, req) (*mcp.CallToolResult, error)`
 
 #### 2. Backend Abstraction
 
@@ -66,17 +69,24 @@ feature_name.go
 ├── newFeatureManager() constructor
 ├── Disk persistence (loadFromDisk / saveToDisk)
 ├── Business logic methods
-└── No handlers (those go in server.go or handlers_phase2.go)
+└── No handlers (those go in handlers_basic.go or handlers_phase2.go)
 ```
+
+> **Note on tool counts**: Handlers are centralized in `handlers_basic.go`,
+> `handlers_phase2.go`, and `handlers_secure.go` (3 files), but each tool is
+> attributed to the feature module that owns its business logic. The sum of
+> the "Tools" column below is 114; the remaining 15 tools (cluster health,
+> container CRUD, templates, exec, backend_info) have no dedicated feature
+> file — they call the backend directly from the handler. Total: **129**.
 
 | File | Feature | Tools |
 |------|---------|-------|
 | `images.go` | Docker image lifecycle | 5 |
-| `deploy.go` | Git/code deployment | 5 |
+| `deploy.go` | Git/code deployment | 3 |
 | `deploy_rollout.go` | Rolling/blue-green updates | 1 |
-| `scaling.go` | Replica management + LB | 9 |
+| `scaling.go` | Replica management + LB | 5 |
 | `health.go` | Probes + auto-restart watcher | 4 |
-| `nodes.go` | Multi-node cluster | 6 |
+| `nodes.go` | Multi-node cluster (TLS-aware remote clients, AS-4) | 6 |
 | `volumes.go` | Volume lifecycle + SSH migrate | 7 |
 | `discovery.go` | Service discovery | 4 |
 | `resources.go` | CPU/memory limits | 4 |
@@ -87,25 +97,30 @@ feature_name.go
 | `backup.go` | Backup + restore | 5 |
 | `routing.go` | Caddy routes + TLS | 4 |
 | `networking.go` | Port maps, DNS, policies | 9 |
-| `ha.go` | Active-passive failover | 1 |
+| `ha.go` | Active-passive failover (heartbeat rate-limited, AS-6) | 1 |
 | `log_aggregation.go` | Multi-container log search | 2 |
 | `audit_query.go` | Audit trail search | 1 |
 | `environments.go` | Namespace isolation | 4 |
 | `notifications.go` | Slack/Discord/Telegram/Email | 4 |
 | `auth_tokens.go` | API token management | 3 |
-| `jobs.go` | Scheduled tasks | 4 |
+| `jobs.go` | Scheduled tasks with real tool execution | 4 |
 | `metrics.go` + `metrics_query.go` | Metrics export + query | 1 |
 | `databases.go` | Managed DB provisioning | 3 |
 | `certificates.go` | TLS cert inspection | 2 |
 | `events.go` | Cluster event stream | 2 |
-| `secure_sandbox.go` | KVM sandbox for untrusted code (egress, vault, snapshots) | 8 |
+| `secure_sandbox.go` | KVM sandbox for untrusted code (egress, vault, snapshots). Security boundary = VM isolation, NOT command filtering (AS-1) | 8 |
+| `scheduler.go` | Bin-packing node placement | 1 |
+| `rollback.go` | Deployment versioning + rollback | 2 |
+| `logstream.go` | SSE log streaming endpoint + `tail_container_logs` | 2 |
+| `webhook.go` | Git webhook endpoint (`X-Git-Token` header auth, AS-5) | 1 |
 
 #### 4. Security Layer
 
 | File | Responsibility |
 |------|---------------|
-| `auth.go` | API keys, RBAC, rate limiting, audit hash chain, HTTP middleware |
-| `security.go` | Input validators (command allowlist, path traversal, SSRF, etc.) |
+| `auth.go` | API keys, RBAC, rate limiting, **HMAC-SHA256** audit hash chain (keyed with `CUBE_SECRETS_KEY`, AS-7), HTTP middleware |
+| `security.go` | Input validators (command allowlist + expanded exfiltration denylist, path traversal, SSRF, etc.) |
+| `secrets.go` | AES-256-GCM secrets; `getSecretsKeyForAudit()` exposes the key for the HMAC audit chain |
 | `security_test.go` | Validator unit tests |
 
 #### 5. Tests
@@ -114,9 +129,10 @@ feature_name.go
 |------|---------|
 | `security_test.go` | Command allowlist, path validation, URL validation |
 | `auth_test.go` | Key generation, RBAC, timing-safe comparison |
+| `secrets_test.go` | AES-256-GCM encryption, argon2id key derivation |
 | `backup_test.go` | Backup, restore, integrity verification |
-| `e2e_test.go` | End-to-end container lifecycle |
-| `bench_test.go` | Performance benchmarks |
+| `e2e_test.go` | End-to-end container lifecycle (`-tags=e2e`) |
+| `bench_test.go` | Performance benchmarks (`-tags=e2e`) |
 | `concurrency_test.go` | Race condition stress tests |
 
 #### 6. Infrastructure
@@ -133,8 +149,8 @@ feature_name.go
 ### Pattern: Adding a New Tool
 
 1. **Create the feature module** (`myfeature.go`) following the module structure above
-2. **Register the tool** in `server.go` → `registerAllTools()`
-3. **Write the handler** in `handlers_phase2.go` (or `server.go`)
+2. **Register the tool** in `tools_registration.go` → `registerAllTools()`
+3. **Write the handler** in `handlers_basic.go` or `handlers_phase2.go`
 4. **Add RBAC** in `auth.go` → `toolPermissions` map
 5. **Add validators** in `security.go` if handling untrusted input
 6. **Compile**: `go build ./...`
@@ -283,4 +299,8 @@ docker build -t cube-container .
 
 ## Known Limitations
 
-See [Roadmap](README.md#roadmap) in the main README.
+- **Secure sandbox command filtering** (AS-1): `secure_sandbox_exec` does NOT apply the `validateCommand()` allowlist. This is by design — the security boundary for untrusted code is KVM hardware isolation, not command filtering. The denylist in `security.go` provides defense-in-depth only.
+- **`sh -c` allowlist bypass** (AS-3): `exec_in_container` uses `sh -c` which allows command chaining and pipes. The expanded denylist catches common exfiltration patterns but cannot prevent all bypasses. For truly untrusted code, use `secure_sandbox_exec` instead.
+- **Inter-node TLS opt-in** (AS-4): Remote Docker connections default to plaintext TCP. Set `CUBE_DOCKER_TLS=true` in production. A warning is printed to stderr when plaintext is used.
+
+See [Roadmap](README.md#roadmap) in the main README for planned features.

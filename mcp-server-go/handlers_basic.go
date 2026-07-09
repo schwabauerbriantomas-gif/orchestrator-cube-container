@@ -111,6 +111,21 @@ func handleCreateContainer(_ context.Context, req mcp.CallToolRequest) (*mcp.Cal
 	cpuCount := argFloat(args, "cpu_count", 1.0)
 	envVars := argMap(args, "env_vars")
 	metadata := argMap(args, "metadata")
+
+	// Inject ConfigMap entries as environment variables
+	if cmName := argString(args, "configmap"); cmName != "" {
+		cmEnv, err := configMgr.asEnvVars(cmName)
+		if err != nil {
+			return errResult(fmt.Sprintf("configmap %s: %v", cmName, err)), nil
+		}
+		// ConfigMap values don't override explicit env_vars
+		for k, v := range cmEnv {
+			if _, exists := envVars[k]; !exists {
+				envVars[k] = v
+			}
+		}
+	}
+
 	data, err := client.CreateSandbox(tmplID, memMB, cpuCount, envVars, metadata)
 	if err != nil {
 		return unwrapError(err), nil
@@ -311,11 +326,18 @@ func handleExecInContainer(_ context.Context, req mcp.CallToolRequest) (*mcp.Cal
 	if command == "" {
 		return errResult("command is required"), nil
 	}
-	// Validate command
+	// Validate command against allowlist + denylist
 	if _, err := validateCommand(command); err != nil {
 		return errResult(err.Error()), nil
 	}
+	// Cap timeout at 300s (AS-2 fix) — matches secure_sandbox_exec limit
 	timeout := argInt(args, "timeout", 30)
+	if timeout > 300 {
+		timeout = 300
+	}
+	if timeout < 1 {
+		timeout = 30
+	}
 	data, err := client.ExecInSandbox(containerID, command, timeout)
 	if err != nil {
 		return unwrapError(err), nil

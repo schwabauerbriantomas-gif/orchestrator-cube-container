@@ -9,6 +9,16 @@ import (
 )
 
 // ---- Secure Sandbox (8) — KVM-isolated untrusted code execution ----
+//
+// SECURITY MODEL: Secure sandboxes use KVM hardware isolation (separate guest
+// kernel). The isolation boundary is the VM, NOT the command allowlist. By
+// design, secure_sandbox_exec does NOT apply validateCommand() — the sandbox
+// is meant to run arbitrary untrusted code. Defense-in-depth:
+//   1. KVM kernel isolation (kernel escape impossible)
+//   2. Egress filtering (domain allowlist/blocklist via proxy)
+//   3. Credential vault (API keys injected by proxy, invisible to code)
+//   4. Max timeout 300s, max lifetime configurable
+//   5. Network can be fully disabled (network_disabled=true)
 
 func handleSecureSandboxCreate(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args := parseArgs(req)

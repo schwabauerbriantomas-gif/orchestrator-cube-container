@@ -59,7 +59,7 @@ Triangulate: the container that appears in 2+ of these is your culprit.
 - **`logs_search` returns nothing** → the containers may not be emitting logs at the searched level, or `since_minutes` is too short. Try a broader pattern and longer window.
 - **No metrics available** → `metrics_query` may return empty if Prometheus scraping isn't running. Fall back to `resource_list_usage` for a real-time snapshot.
 - **Container keeps restarting (CrashLoopBackoff equivalent)** → `health_check_status` shows high restart count → `get_container_logs` for the crash reason → if it's a config/code issue, `rollback_deploy`; if resource, `resource_set_limits` to raise limits.
-- **Can't fix it from logs alone** → `exec_in_container` to poke around inside (`ls`, `cat config`, `curl localhost:port`). This is operator role and the command must pass the allowlist validator.
+- **Can't fix it from logs alone** → `exec_in_container` to poke around inside (`ls`, `cat config`, `curl localhost:port`). This is operator role and the command must pass the allowlist validator. Timeout is hard-capped at 300s (AS-2). For truly untrusted diagnostic scripts, use `secure_sandbox_exec` instead.
 
 ## Example Session
 

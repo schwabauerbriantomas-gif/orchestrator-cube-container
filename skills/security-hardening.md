@@ -19,6 +19,8 @@
 6. **Set up alert delivery** — `notify_channel_add` with `name`, `type` (slack|discord|telegram|email), and the type-specific args (`webhook_url` for Slack/Discord, `bot_token`+`chat_id` for Telegram, `email_to`+`smtp_host` for email)
    - Alerts fire to webhook URLs. Without a channel configured, `container_down` alerts have nowhere to go. Test with `alert_test`.
 7. **Lock down network access (optional, admin)** — `add_network_policy` with `action: "deny"` between containers that shouldn't talk; `add_port_mapping` only where truly needed (avoid exposing DBs publicly).
+8. **Enable inter-node TLS (multi-node clusters)** — set `CUBE_DOCKER_TLS=true` for encrypted remote Docker connections (AS-4). Plaintext emits a stderr warning and should never be used in production.
+9. **Verify webhook auth (if webhooks are enabled)** — webhook secrets are accepted ONLY via the `X-Git-Token` header (AS-5). Ensure CI/CD pipelines send the token in the header, not as a query param.
 
 ## Decision Points
 
@@ -27,6 +29,9 @@
 - **Which alert types?** Production minimum: `container_down` (critical) for every user-facing container. Add `cpu_high`/`mem_high`/`disk_high` (warning, threshold ~80%) per node once you have steady-state traffic.
 - **Alert severity?** `container_down` on a prod user-facing service → `critical`. Resource pressure → `warning`. Informational → `info`. Over-escalating causes alert fatigue; under-escalating means you miss outages.
 - **Network policy needed?** Only if containers from different services/environments shouldn't reach each other. Default is open within the cluster. Add deny rules for DBs that should only be reachable by their app.
+- **Inter-node TLS?** Set `CUBE_DOCKER_TLS=true` in any multi-node production deployment (AS-4). Without it, remote Docker API calls are plaintext. The server prints a warning, but it won't refuse to start.
+- **`exec_in_container` timeout?** Hard-capped at 300s (AS-2). If a command needs more time, split it or run it as a job. For truly untrusted code, use `secure_sandbox_exec` instead — its security boundary is KVM isolation, not command filtering (AS-1).
+- **Audit trail integrity?** The audit hash chain uses HMAC-SHA256 keyed with `CUBE_SECRETS_KEY` (AS-7). Always set this env var in production — without it, the chain falls back to plain SHA-256, which an attacker could recompute after tampering.
 
 ## Error Recovery
 

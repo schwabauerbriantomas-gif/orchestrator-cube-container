@@ -201,6 +201,21 @@ func (dm *DeployManager) DeployFromGit(gitURL, branch, image string, exposePorts
 		return nil, err
 	}
 
+	// Extract container ID and commit hash for version tracking
+	containerID := extractID(container)
+	commitHash, _ := cloneResult["commit_hash"].(string)
+
+	// Record deployment version for rollback support
+	var versionInfo map[string]interface{}
+	if versionMgr != nil {
+		manifest, vErr := recordDeployment(appName, templateID, containerID, gitURL, branch, commitHash, startCmd)
+		if vErr == nil && manifest != nil {
+			versionInfo = map[string]interface{}{
+				"version_number": manifest.VersionNumber,
+			}
+		}
+	}
+
 	return map[string]interface{}{
 		"app_name":    appName,
 		"volume":      volume,
@@ -209,6 +224,7 @@ func (dm *DeployManager) DeployFromGit(gitURL, branch, image string, exposePorts
 		"template_id": templateID,
 		"container":   container,
 		"start_cmd":   startCmd,
+		"version":     versionInfo,
 	}, nil
 }
 
@@ -272,6 +288,18 @@ func (dm *DeployManager) DeployFromCode(appName string, files map[string]string,
 		return nil, err
 	}
 
+	// Record deployment version for rollback support
+	containerID := extractID(container)
+	var versionInfo map[string]interface{}
+	if versionMgr != nil {
+		manifest, vErr := recordDeployment(appName, templateID, containerID, "", "", "", startCmd)
+		if vErr == nil && manifest != nil {
+			versionInfo = map[string]interface{}{
+				"version_number": manifest.VersionNumber,
+			}
+		}
+	}
+
 	return map[string]interface{}{
 		"app_name":      appName,
 		"volume":        volume,
@@ -279,6 +307,7 @@ func (dm *DeployManager) DeployFromCode(appName string, files map[string]string,
 		"template_id":   templateID,
 		"container":     container,
 		"start_cmd":     startCmd,
+		"version":       versionInfo,
 	}, nil
 }
 
@@ -319,6 +348,11 @@ func (dm *DeployManager) UpdateCode(containerID, gitURL, branch string) (map[str
 // ---- Internal helpers ----
 
 func (dm *DeployManager) gitCloneOrPull(gitURL, branch, workspace string) (map[string]interface{}, error) {
+	// Check git is available before attempting clone/pull
+	if !isGitInstalled() {
+		return nil, fmt.Errorf("git is not installed or not in PATH — required for deploy operations")
+	}
+
 	// Validate branch name to prevent option injection (H3).
 	if err := validateBranchName(branch); err != nil {
 		return nil, err
@@ -329,19 +363,23 @@ func (dm *DeployManager) gitCloneOrPull(gitURL, branch, workspace string) (map[s
 		// Pull: fetch + reset
 		runGit(workspace, "fetch", "origin", branch)
 		output := runGit(workspace, "reset", "--hard", "origin/"+branch)
+		commitHash := strings.TrimSpace(runGit(workspace, "rev-parse", "HEAD"))
 		return map[string]interface{}{
-			"action": "pulled",
-			"branch": branch,
-			"output": truncate(output, 500),
+			"action":      "pulled",
+			"branch":      branch,
+			"commit_hash": commitHash,
+			"output":      truncate(output, 500),
 		}, nil
 	}
 	// Clone — note the -- separator before positional args to prevent option injection.
 	os.MkdirAll(workspace, 0755)
 	output := runGit(workspace, "clone", "--depth", "1", "-b", branch, "--", gitURL, workspace)
+	commitHash := strings.TrimSpace(runGit(workspace, "rev-parse", "HEAD"))
 	return map[string]interface{}{
-		"action": "cloned",
-		"branch": branch,
-		"output": truncate(output, 500),
+		"action":      "cloned",
+		"branch":      branch,
+		"commit_hash": commitHash,
+		"output":      truncate(output, 500),
 	}, nil
 }
 

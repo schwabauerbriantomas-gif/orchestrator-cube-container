@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 // ---- Tool builders ----
@@ -17,6 +18,19 @@ func tool(name, desc string) mcp.Tool {
 func toolWithArgs(name, desc string, opts ...mcp.ToolOption) mcp.Tool {
 	allOpts := append([]mcp.ToolOption{mcp.WithDescription(desc)}, opts...)
 	return mcp.NewTool(name, allOpts...)
+}
+
+// ---- Handler registry (for scheduled job execution) ----
+
+// toolHandlerRegistry maps tool names to their handler functions.
+// Populated by registerAllTools, consumed by the job scheduler.
+var toolHandlerRegistry = make(map[string]server.ToolHandlerFunc)
+
+// registerTool registers a tool with the MCP server AND records the handler
+// in the registry so the job scheduler can invoke it internally.
+func registerTool(s *server.MCPServer, t mcp.Tool, handler server.ToolHandlerFunc) {
+	toolHandlerRegistry[t.Name] = handler
+	s.AddTool(t, handler)
 }
 
 // ---- Argument extraction helpers ----

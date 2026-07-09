@@ -4,6 +4,17 @@
 **Prerequisites:** Cube backend running (CUBE_BACKEND=cube), KVM available on host
 **RBAC Required:** admin (to create), operator (to exec), viewer (to list)
 
+## Security Model (AS-1)
+
+The secure sandbox is isolated at the **hardware level (KVM)** — each sandbox runs
+its own guest kernel. Command filtering is intentionally NOT applied to
+`secure_sandbox_exec`. The VM boundary IS the security control. The sandbox can run
+`rm -rf /`, reverse shells, or anything else — it can only affect the disposable
+guest. Egress allowlists and network kill switches contain network activity.
+
+**Do NOT use `exec_in_container` for untrusted code.** It runs on the Docker backend
+(shared kernel) and uses `sh -c` which cannot be fully contained by the denylist.
+
 ## When to Use Secure Sandbox vs Regular Container
 
 | Situation | Use |

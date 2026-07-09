@@ -122,6 +122,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "[cube-mcp] WARNING: secrets manager disabled: %v\n", err)
 	} else {
 		secretsMgr = sm
+		// AS-7: Use the same secrets key to HMAC the audit chain, making it
+		// tamper-proof against full-file rewrites.
+		if key := getSecretsKeyForAudit(); key != nil {
+			auditMACKey = key
+		}
 	}
 
 	// HA manager (active-passive CubeMaster failover)

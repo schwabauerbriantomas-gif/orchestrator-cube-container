@@ -267,20 +267,6 @@ func (nr *NodeRegistry) listNodes() []NodeSummary {
 	return out
 }
 
-// activeNodes returns nodes in 'active' state, suitable for scheduling.
-func (nr *NodeRegistry) activeNodes() []*Node {
-	nr.mu.Lock()
-	defer nr.mu.Unlock()
-
-	out := make([]*Node, 0)
-	for _, n := range nr.nodes {
-		if n.State == NodeActive {
-			out = append(out, n)
-		}
-	}
-	return out
-}
-
 // markSeen updates the LastSeen timestamp for a node.
 func (nr *NodeRegistry) markSeen(id string) {
 	nr.mu.Lock()
@@ -313,15 +299,19 @@ func remoteBackendForNode(n *Node) (ContainerBackend, error) {
 
 // newRemoteCubeClient creates a CubeClient pointed at a remote CubeAPI.
 // Uses HTTPS if CUBE_CUBE_TLS=true or the address already starts with https://.
+// AS-4: Logs a prominent warning when TLS is not enabled.
 func newRemoteCubeClient(address string) *CubeClient {
 	baseURL := "http://" + address
-	// M6: inter-node TLS support. If TLS is explicitly enabled, upgrade to https://
-	if envOr("CUBE_CUBE_TLS", "false") == "true" || strings.HasPrefix(address, "https://") {
+	tlsEnabled := envOr("CUBE_CUBE_TLS", "false") == "true" || strings.HasPrefix(address, "https://")
+	if tlsEnabled {
 		if !strings.HasPrefix(address, "https://") && !strings.HasPrefix(address, "http://") {
 			baseURL = "https://" + address
 		} else {
 			baseURL = address
 		}
+	} else {
+		fmt.Fprintf(os.Stderr, "[cube-mcp] WARNING: remote Cube client to %s using PLAINTEXT HTTP — "+
+			"set CUBE_CUBE_TLS=true for encrypted inter-node communication\n", address)
 	}
 	return &CubeClient{
 		BaseURL: baseURL,
@@ -336,6 +326,7 @@ func newRemoteCubeClient(address string) *CubeClient {
 // newRemoteDockerClient creates a DockerClient pointed at a remote Docker daemon.
 // Uses TLS (tcp+tls://) if CUBE_DOCKER_TLS=true, enabling secure inter-node
 // communication over TCP port 2376.
+// AS-4: Logs a prominent warning when TLS is not enabled.
 func newRemoteDockerClient(address string) *DockerClient {
 	// Strip tcp:// or tcp+tls:// prefix if present
 	addr := strings.TrimPrefix(address, "tcp://")
@@ -344,7 +335,10 @@ func newRemoteDockerClient(address string) *DockerClient {
 	if envOr("CUBE_DOCKER_TLS", "false") == "true" {
 		// M6: TLS transport for remote Docker connections
 		// Docker daemon must be configured with --tlsverify on the remote node
-		transport = "tcp" // still TCP, but the Transport layer adds TLS
+		transport = "tls"
+	} else {
+		fmt.Fprintf(os.Stderr, "[cube-mcp] WARNING: remote Docker client to %s using PLAINTEXT TCP — "+
+			"set CUBE_DOCKER_TLS=true for encrypted inter-node communication\n", addr)
 	}
 	return newDockerClientWithTransport(addr, transport)
 }

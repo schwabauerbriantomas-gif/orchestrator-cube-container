@@ -3,8 +3,8 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
 [![MCP Server](https://img.shields.io/badge/MCP-129%20tools-orange)](https://modelcontextprotocol.io)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8)](https://go.dev)
-[![Security Audit](https://img.shields.io/badge/Security-40%20issues%20fixed-red)](#security)
-[![Tests](https://img.shields.io/badge/Tests-43%20passing-brightgreen)](#testing)
+[![Security Audit](https://img.shields.io/badge/Security-47%20issues%20fixed-red)](#security)
+[![Tests](https://img.shields.io/badge/Tests-40%20passing-brightgreen)](#testing)
 
 A container orchestration platform controlled by AI through the Model Context Protocol. An MCP server that replaces the DevOps role — the operations interface is natural language, not YAML.
 
@@ -58,9 +58,9 @@ docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-con
 
 ## Tool Reference (129 tools)
 
-<!-- Tool count is verified by CI: `grep -c 's.AddTool' mcp-server-go/server.go` must equal 129. -->
+<!-- Tool count is verified by CI: `grep -c 'registerTool(s,' mcp-server-go/tools_registration.go` must equal 129. -->
 
-### Cluster & Nodes (7)
+### Cluster & Nodes (12)
 
 | Tool | Description | Role |
 |------|-------------|------|
@@ -71,6 +71,11 @@ docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-con
 | `get_node` | Detailed node info | viewer |
 | `suggest_node` | Best node for new container (bin-packing) | viewer |
 | `backend_info` | Active backend + features + tool count | viewer |
+| `node_add` | Register a new cluster node | admin |
+| `node_update` | Update node properties (address, state, resources) | admin |
+| `node_remove` | Remove a node from the cluster registry | admin |
+| `node_list` | List all registered cluster nodes | viewer |
+| `node_get` | Detailed info about a specific node | viewer |
 
 ### Container Lifecycle (10)
 
@@ -97,7 +102,7 @@ docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-con
 | `image_list` | List images with size + tags | viewer |
 | `image_tag` | Tag existing image with new name | operator |
 
-### Deploy (7)
+### Deploy (8)
 
 | Tool | Description | Role |
 |------|-------------|------|
@@ -107,13 +112,8 @@ docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-con
 | `rollback_deploy` | Rollback to previous version | admin |
 | `list_deploy_versions` | Version history | viewer |
 | `deploy_to_node` | Deploy to specific remote node | operator |
+| `deploy_rollout` | Rolling or blue-green update | operator |
 | `suggest_node` | Best node for deployment | viewer |
-
-### Rolling Deployment (1) — zero-downtime
-
-| Tool | Description | Role |
-|------|-------------|------|
-| `deploy_rollout` | Rolling or blue-green update with health gate | operator |
 
 ### Scaling & Services (9)
 
@@ -195,14 +195,6 @@ docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-con
 | `list_backups` | All backups | viewer |
 | `restore_backup` | Restore from backup | admin |
 | `delete_backup` | Delete backup | admin |
-
-### Multi-Node Cluster (6)
-
-| Tool | Description | Role |
-|------|-------------|------|
-| `node_add` / `node_remove` / `node_update` | Cluster membership | admin |
-| `node_list` / `node_get` | Node info | viewer |
-| `deploy_to_node` | Deploy to remote node | operator |
 
 ### Environments (4) — namespace isolation
 
@@ -306,11 +298,27 @@ These tools provide hardware-level isolation for running untrusted code. Each sa
 |------|-------------|------|
 | `ha_state` | Active-passive failover state | viewer |
 
+### Alerting (4)
+
+| Tool | Description | Role |
+|------|-------------|------|
+| `alert_rule_add` | Create alert rule (container_down, cpu_high, disk_high, mem_high) | admin |
+| `alert_rule_remove` | Remove alert rule | admin |
+| `alert_list` | List all alert rules with fire counts | viewer |
+| `alert_test` | Fire test alert to verify webhook config | operator |
+
+### Events (2)
+
+| Tool | Description | Role |
+|------|-------------|------|
+| `events_list` | List events filtered by type/severity/time | viewer |
+| `events_recent` | Get 20 most recent cluster events | viewer |
+
 ## Security
 
 ### Audit History
 
-35 security issues identified and fixed across 3 audit rounds:
+47 security issues identified and fixed across 5 audit rounds:
 
 | Round | Critical | High | Medium | Low | Total |
 |-------|----------|------|--------|-----|-------|
@@ -318,20 +326,36 @@ These tools provide hardware-level isolation for running untrusted code. Each sa
 | 2 | 2 (C5-C6) | 3 (H6-H8) | 2 (M6-M7) | 1 (B5) | 8 |
 | 3 | 1 (C7) | 3 (H9-H11) | 3 (M8-M10) | 2 (B6-B7) | 9 |
 | 4 | 1 (C8) | 1 (H12) | 2 (M11-M12) | 1 (B8) | 5 |
-| **Total** | **8** | **12** | **12** | **8** | **40** |
+| 5 | — | 1 (AS-1) | 3 (AS-2, AS-3, AS-4) | 2 (AS-5, AS-6) | 7 |
+| **Total** | **8** | **13** | **15** | **10** | **47** |
+
+Round 5 (Attack Surface Audit) findings:
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| AS-1 | High | `secure_sandbox_exec` bypasses command allowlist | Documented as by-design: KVM isolation is the security boundary, not command filtering. Defense-in-depth denylist expanded. |
+| AS-2 | Medium | `exec_in_container` accepts unbounded timeout | Hard cap of 300s + floor of 1s enforced in handler. |
+| AS-3 | Medium | `sh -c` in Docker exec bypasses allowlist | Denylist expanded with 15 additional exfiltration/reverse-shell patterns (pipe-to-network, backtick substitution, chaining operators). Defense-in-depth only. |
+| AS-4 | Medium | Remote Docker/Cube clients default to plaintext TCP | `newDockerClientWithTransport` now supports `transport="tls"` with real TLS dial. Warning printed to stderr when plaintext is used. |
+| AS-5 | Low | Webhook secret accepted via `?token=` query param | Removed query param fallback. `X-Git-Token` header is now the only accepted method. |
+| AS-6 | Low | HA heartbeat endpoint lacks rate limiting | Per-IP rate limiter (60 req/min) added to `HandleHeartbeat`. |
+| AS-7 | Info | Audit hash chain uses plain SHA-256 (recomputable) | `computeAuditHash` now uses HMAC-SHA256 keyed with `CUBE_SECRETS_KEY`. Falls back to SHA-256 for backward compatibility with existing logs. |
 
 ### Security Features
 
 - **Auth**: API key + secret, timing-safe comparison
 - **RBAC**: 3 roles (viewer, operator, admin), per-tool permissions
-- **Rate limiting**: 120 req/min per key
-- **Audit logging**: tamper-evident hash chain, JSONL format
-- **Secrets**: AES-256-GCM encryption at rest, PBKDF2 key derivation
-- **Input validation**: allowlist for commands, path traversal protection, SSRF prevention
+- **Rate limiting**: 120 req/min per key (global), 60 req/min per-IP on HA heartbeat (AS-6)
+- **Audit logging**: tamper-evident **HMAC-SHA256** hash chain (keyed with `CUBE_SECRETS_KEY`), JSONL format
+- **Secrets**: AES-256-GCM encryption at rest, argon2id key derivation
+- **Input validation**: allowlist for commands, expanded denylist for exfiltration/reverse-shell patterns, path traversal protection, SSRF prevention
 - **TLS**: automatic via Caddy (Let's Encrypt), or native with cert files
+- **Inter-node TLS**: `CUBE_DOCKER_TLS=true` enables real TLS for remote Docker connections (AS-4). Plaintext emits a stderr warning.
 - **Body limiting**: configurable max request size
 - **Connection limiting**: per-IP max connections
 - **Network isolation**: inter-node TLS optional (`CUBE_NODE_TLS_CERT`)
+- **Exec timeout cap**: `exec_in_container` hard-capped at 300s (AS-2)
+- **Webhook auth**: `X-Git-Token` header only — no query-param secrets (AS-5)
 
 ### Validators
 
@@ -366,11 +390,12 @@ These tools provide hardware-level isolation for running untrusted code. Each sa
 | `CUBE_AUDIT_DIR` | `/var/lib/cube-container/audit` | Audit log directory |
 | `CUBE_AUDIT_LOG` | `/var/lib/cube-container/audit.logl` | Active audit log file |
 | `CUBE_SECRETS_KEY` | — | AES-256 hex key (64 chars) |
-| `CUBE_SECRETS_PASSPHRASE` | — | PBKDF2 passphrase for key derivation |
+| `CUBE_SECRETS_PASSPHRASE` | — | Passphrase for argon2id key derivation |
 | `CUBE_TLS_CERT` | — | TLS certificate file |
 | `CUBE_TLS_KEY` | — | TLS private key file |
 | `CUBE_NODE_TLS_CERT` | — | Inter-node TLS cert |
 | `CUBE_NODE_TLS_KEY` | — | Inter-node TLS key |
+| `CUBE_DOCKER_TLS` | `false` | Enable TLS for remote Docker connections (AS-4). Set to `true` in production multi-node clusters. |
 | `CUBE_HA_PEERS` | — | HA peer addresses (comma-separated) |
 | `CUBE_HA_SELF_ID` | — | This node's HA ID |
 | `CUBE_HA_PRIORITY` | `100` | HA failover priority |
@@ -399,7 +424,7 @@ go test -race -count=1 ./...
 go test -bench=. -benchmem ./...
 ```
 
-43 tests covering security validators, auth/RBAC, backup/restore, e2e flows, concurrency stress tests.
+40 tests covering security validators, auth/RBAC, backup/restore, e2e flows, concurrency stress tests.
 
 ## Build
 
@@ -417,17 +442,20 @@ Binary size: ~8.5MB (statically linked, no CGO).
 
 ```
 mcp-server-go/
-├── server.go            — 129 tool registrations, dual mode, HTTP middleware
-├── handlers_phase2.go   — 32 handlers (images, deploy, logs, envs, jobs, DBs, certs, events)
+├── server.go            — main(), managers, HTTP middleware, stdio/HTTP mode
+├── tools_registration.go — all 129 tool registrations via registerTool()
+├── tools_helpers.go     — tool builders, arg extraction, handler registry (jobs)
+├── handlers_basic.go    — handlers: cluster, containers, templates, deploy, volumes, backup
+├── handlers_phase2.go   — handlers: images, deploy, logs, envs, jobs, DBs, certs, events
+├── handlers_secure.go   — handlers: secure sandbox operations
 ├── backend.go           — ContainerBackend interface + auto-detection
 ├── docker_client.go     — Docker Engine API backend
 ├── client.go            — CubeAPI backend
 ├── auth.go              — API keys, RBAC, rate limiting, audit hash chain
 ├── auth_tokens.go       — Programmatic token management (create/list/revoke)
 ├── security.go          — Input validators (command, path, URL, container ID)
-├── security_test.go     — Validator tests
 ├── images.go            — Docker image lifecycle (build/push/pull/list/tag)
-├── deploy.go            — Git deploy + persistent volumes
+├── deploy.go            — Git deploy + persistent volumes + version tracking
 ├── deploy_rollout.go    — Rolling + blue-green deployment
 ├── scaling.go           — Replica management + load balancing
 ├── health.go            — Health probes + auto-restart watcher
@@ -439,28 +467,30 @@ mcp-server-go/
 ├── alerting.go          — Alert rules + webhook dispatcher
 ├── configmaps.go        — Non-sensitive configuration data
 ├── secrets.go           — AES-256-GCM encrypted secrets
-├── backup.go            — Volume/container backup + restore
-├── routing.go           — Caddy route management + TLS
-├── networking.go        — Port mappings, DNS, network policies
-├── ha.go                — Active-passive high availability
-├── log_aggregation.go   — Multi-container log search + aggregation
+├── backup.go            — Backup + restore + integrity verification
+├── routing.go           — Caddy routes + TLS
+├── networking.go        — Port mappings, DNS aliases, network policies
+├── ha.go                — Active-passive failover + heartbeat
+├── jobs.go              — Scheduled jobs with real tool execution
+├── log_aggregation.go   — Multi-container log search
 ├── audit_query.go       — Audit trail search
-├── environments.go      — Namespace isolation + promotion
-├── notifications.go     — Slack/Discord/Telegram/Email dispatch
-├── jobs.go              — Scheduled job execution
-├── metrics.go           — Prometheus metrics exporter
-├── metrics_query.go     — Programmatic metrics access
-├── databases.go         — Managed DB provisioning (PG/MySQL/Redis/Mongo)
-├── certificates.go      — TLS certificate inspection + renewal
+├── environments.go      — Namespace isolation
+├── notifications.go     — Slack/Discord/Telegram/Email delivery
+├── databases.go         — Managed DB provisioning
+├── certificates.go      — TLS cert inspection
 ├── events.go            — Cluster event stream
-├── secure_sandbox.go    — KVM secure sandbox (untrusted code, egress, vault, snapshots)
-├── handlers_secure.go   — 8 secure sandbox handlers
-├── webhook.go           — Git webhook listener
-├── scheduler.go         — 4D bin-packing scheduler
-├── rollback.go          — Deploy rollback
-├── Dockerfile           — Multi-stage build with Caddy
+├── metrics.go           — Prometheus metrics export
+├── metrics_query.go     — Programmatic metrics query
+├── secure_sandbox.go    — KVM sandbox for untrusted code
+├── scheduler.go         — Bin-packing node scheduler
+├── rollback.go          — Deployment versioning + rollback
+├── logstream.go         — SSE log streaming endpoint
+├── webhook.go           — Git webhook endpoint
+├── Dockerfile           — Multi-stage build (Go + Caddy)
 ├── Caddyfile            — TLS 1.3 + WAF + rate limiting
-└── .github/workflows/   — CI (build, test, vet, gosec, govulncheck)
+├── ARCHITECTURE.md      — Codebase map for AI agents
+├── AGENT_GUIDE.md       — Conventions for working on this codebase
+└── *_test.go            — Tests (security, auth, backup, e2e, bench, concurrency)
 ```
 
 ## Documentation
@@ -493,10 +523,11 @@ The `skills/` directory contains playbooks that teach the AI model how to chain 
 ## Roadmap
 
 ### Security
-- [ ] Network isolation for database containers (`CreateNetwork` in backend interface)
+- [x] ~~Network isolation for database containers~~ (partially via network policies)
 - [ ] Hardened container defaults (seccomp + AppArmor + cap-drop)
 - [ ] `--runtime` parameter for gVisor/Kata/Firecracker support
 - [ ] `CUBE_SECURE_RUNTIME` env var for node-level isolation default
+- [ ] Enforce `CUBE_DOCKER_TLS=true` in production (currently warns on plaintext)
 
 ### Untrusted Code Hosting
 - [ ] gVisor (`runsc`) support for edge nodes (4GB RAM)
@@ -509,8 +540,9 @@ The `skills/` directory contains playbooks that teach the AI model how to chain 
 - [ ] Real-time event streaming via SSE
 - [ ] Log timestamp extraction from known formats (RFC3339, syslog)
 - [ ] Email channel implementation (SMTP relay)
-- [ ] Job tool execution (currently records intent, execution TBD)
+- [x] ~~Job tool execution~~ (job executor now runs real tools via handler registry)
 - [ ] Tests for Phase 2 features (images, rollout, logs, envs, jobs, DBs, certs, events)
+- [ ] Unit tests for AS-1 through AS-7 fixes
 
 ## License
 

@@ -72,17 +72,15 @@ func handleGitWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Optional secret validation (X-Git-Token header OR ?token= query param)
+	// Optional secret validation (X-Git-Token header only — AS-5: removed ?token=
+	// query param fallback to prevent secret leaking in access logs and Referer headers)
 	// Uses constant-time comparison to prevent timing attacks (H2).
 	if webhookConfig.secret != "" {
 		provided := r.Header.Get("X-Git-Token")
-		if provided == "" {
-			provided = r.URL.Query().Get("token")
-		}
 		if !hmac.Equal([]byte(provided), []byte(webhookConfig.secret)) {
 			writeWebhookJSON(w, http.StatusUnauthorized, webhookResponse{
 				Status:  "error",
-				Message: "invalid or missing webhook secret",
+				Message: "invalid or missing webhook secret (use X-Git-Token header)",
 			})
 			return
 		}

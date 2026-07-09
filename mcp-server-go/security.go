@@ -86,37 +86,28 @@ var execDenylist = []string{
 	"reboot",
 	"halt",
 	"poweroff",
-	// Pipe-to-interpreter (covers all common shells)
-	"| sh",
-	"| bash",
-	"|/bin/sh",
-	"|/bin/bash",
-	"| python",
-	"| python3",
-	"| node",
-	"| perl",
-	"| ruby",
+	// Pipe-to-interpreter and pipe-to-network-tools (data exfiltration + RCE)
+	"| sh", "| bash", "|/bin/sh", "|/bin/bash",
+	"| python", "| python3", "| node", "| perl", "| ruby", "| php",
+	"| curl", "| wget", "| nc", "| ncat", "| ssh", "| scp",
+	"| telnet", "| socat", "| openssl", "| awk ", "| tee ",
 	// Command substitution patterns
-	"$(sh",
-	"$(bash",
-	"$(python",
-	"$(curl",
-	"$(wget",
+	"$(sh", "$(bash", "$(python", "$(curl", "$(wget", "$(nc", "$(ssh",
+	// Backtick command substitution
+	"`sh", "`bash", "`python", "`curl", "`wget",
 	// Block-device writes
-	">/dev/sd",
-	">/dev/vd",
-	">/dev/nvm",
+	">/dev/sd", ">/dev/vd", ">/dev/nvm",
 	// eval / exec
-	"eval ",
-	"exec ",
+	"eval ", "exec ",
+	// Reverse shell patterns
+	"/dev/tcp/", "/dev/udp/",
+	"& sh", "& bash", "; sh", "; bash", "&& sh", "&& bash", "|| sh", "|| bash",
 }
 
 func init() {
 	// Allow extending the allowlist via env var.
 	if extra := os.Getenv("CUBE_EXEC_ALLOWLIST"); extra != "" {
-		for _, cmd := range splitAndTrim(extra) {
-			execAllowlist = append(execAllowlist, cmd)
-		}
+		execAllowlist = append(execAllowlist, splitAndTrim(extra)...)
 	}
 }
 

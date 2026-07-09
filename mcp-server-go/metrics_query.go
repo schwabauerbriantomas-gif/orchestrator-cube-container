@@ -9,7 +9,6 @@
 package main
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -107,16 +106,4 @@ func (mq *MetricsQueryManager) Query(params MetricsQueryParams) (*MetricsQueryRe
 
 // ---- Snapshot helper ----
 //
-// MetricsCollector needs a Snapshot() method. If it doesn't exist yet,
-// we provide a stub here that reads from the collector's internal state.
-// The real implementation is in metrics.go.
-
-func ensureMetricsSnapshot() {
-	// This function exists to document that MetricsCollector.Snapshot()
-	// must exist. If it doesn't, we need to add it.
-	if metricsCollector == nil {
-		return
-	}
-}
-
-var _ = fmt.Sprintf // keep import
+// ---- Tool handlers: Metrics query ----

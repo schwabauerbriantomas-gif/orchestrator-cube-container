@@ -15,6 +15,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -50,13 +51,23 @@ func newDockerClient() *DockerClient {
 // a local unix socket or a remote TCP endpoint.
 func newDockerClientWithTransport(address, transport string) *DockerClient {
 	var dialContext func(ctx context.Context, _, _ string) (net.Conn, error)
-	if transport == "tcp" {
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+	switch transport {
+	case "tcp":
 		d := net.Dialer{}
 		dialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			// address is already host:port
 			return d.DialContext(ctx, "tcp", address)
 		}
-	} else {
+	case "tls":
+		// AS-4: TLS transport for remote Docker daemon connections
+		d := net.Dialer{}
+		dialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			conn, err := tls.DialWithDialer(&d, "tcp", address, tlsConfig)
+			return conn, err
+		}
+	default: // unix socket
 		d := net.Dialer{}
 		dialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return d.DialContext(ctx, "unix", address)

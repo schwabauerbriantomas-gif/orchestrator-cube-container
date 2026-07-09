@@ -35,7 +35,9 @@ overhead per instance. Each sandbox runs its own guest kernel.
 | **Time limits** | `max_lifetime_seconds` param | Auto-pause after N seconds |
 | **Network kill** | `network_disabled` param | Zero network access |
 
-### Security Hardening Applied (Round 4 Audit)
+### Security Hardening Applied (Round 4 + Round 5 Audits)
+
+#### Round 4
 
 | ID | Fix |
 |----|-----|
@@ -44,6 +46,51 @@ overhead per instance. Each sandbox runs its own guest kernel.
 | M11 | Egress rules registered directly against CubeEgress, not just metadata |
 | M12 | `secure_sandbox_list` filters to only secure sandboxes, not all containers |
 | B8 | DNS rebinding documented as known limitation (CubeEgress must enforce at connection time) |
+
+#### Round 5 (Attack Surface Audit)
+
+| ID | Severity | Fix |
+|----|----------|-----|
+| AS-1 | High | **Security model documented**: `secure_sandbox_exec` intentionally does NOT filter commands. KVM isolation is the security boundary. Denylist expanded for defense-in-depth. |
+| AS-2 | Medium | `exec_in_container` timeout hard-capped at 300s (floor 1s). Prevents resource exhaustion via long-running commands. |
+| AS-3 | Medium | Denylist expanded with 15 additional patterns: pipe-to-network (`\| curl`, `\| wget`, `\| nc`), backtick substitution, reverse shell patterns (`/dev/tcp`), chaining operators. Note: defense-in-depth only — `sh -c` cannot be fully contained at the string level. |
+| AS-4 | Medium | Inter-node Docker connections support real TLS (`CUBE_DOCKER_TLS=true`). Plaintext now prints a stderr warning. |
+| AS-5 | Low | Webhook secrets accepted via `X-Git-Token` header only — query-param fallback removed to prevent log/Referer leakage. |
+| AS-6 | Low | HA heartbeat endpoint rate-limited (60 req/min per-IP). |
+| AS-7 | Info | Audit hash chain upgraded to HMAC-SHA256 keyed with `CUBE_SECRETS_KEY`. Tamper-evident against full-log-rewrite attacks. |
+
+### Secure Sandbox Security Model (AS-1)
+
+The secure sandbox is designed to execute **arbitrary untrusted code**. Applying the
+`validateCommand()` allowlist would directly contradict this purpose — the sandbox
+exists precisely because the code cannot be trusted.
+
+**The security boundary is KVM hardware isolation:**
+
+```
+┌─────────────────────────────────────┐
+│  Host kernel                        │
+│  ┌────────────────────────────────┐ │
+│  │  KVM                           │ │
+│  │  ┌──────────────────────────┐  │ │
+│  │  │  Guest kernel (isolated) │  │ │
+│  │  │  ┌────────────────────┐  │  │ │
+│  │  │  │  Untrusted code    │  │  │ │
+│  │  │  │  (can do anything  │  │  │ │
+│  │  │  │   WITHIN the VM)   │  │  │ │
+│  │  │  └────────────────────┘  │  │ │
+│  │  └──────────────────────────┘  │ │
+│  └────────────────────────────────┘ │
+└─────────────────────────────────────┘
+```
+
+The code inside the sandbox can run `rm -rf /` — and it only destroys the disposable
+guest filesystem. It can run reverse shells — but they're contained by the egress
+allowlist and network kill switch. **Command filtering is unnecessary when the entire
+kernel is disposable.**
+
+The denylist in `security.go` (applied to `exec_in_container`, not `secure_sandbox_exec`)
+serves as defense-in-depth for the Docker backend, where no hardware isolation exists.
 
 ### Why This Beats External Solutions
 

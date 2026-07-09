@@ -158,9 +158,9 @@ func (sm *SecureSandboxManager) Create(config SecureSandboxConfig) (*SecureSandb
 	// Only Cube backend supports KVM sandboxes
 	cubeClient, ok := sm.backend.(*CubeClient)
 	if !ok {
-		return nil, fmt.Errorf("secure sandboxes require the Cube backend (KVM isolation). "+
-			"Current backend: %s. Set CUBE_BACKEND=cube to use secure sandboxes. "+
-			"Docker containers share the host kernel and cannot provide hardware-level isolation.",
+		return nil, fmt.Errorf("secure sandboxes require the Cube backend (KVM isolation); "+
+			"current backend: %s; set CUBE_BACKEND=cube to use secure sandboxes; "+
+			"docker containers share the host kernel and cannot provide hardware-level isolation",
 			sm.backend.BackendName())
 	}
 
