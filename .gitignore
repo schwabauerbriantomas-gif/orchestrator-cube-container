@@ -33,3 +33,19 @@ config.local.*
 # Cube runtime artifacts
 *.log
 node_modules/
+
+# Compiled binaries (build artifacts)
+Cubelet/cubelet
+CubeMaster/cube-master
+**/bin/
+**/*.exe
+
+# AI tool configs (not part of the project)
+.claude/
+.cursor/
+.aider*
+
+# Go test/build artifacts
+coverage.out
+coverage.profile
+*.prof

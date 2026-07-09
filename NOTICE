@@ -22,8 +22,10 @@ The following modifications were made to the original CubeSandbox in this fork
 ("Cube Container"):
 
 1. Added mcp-server-go/ — a Go MCP (Model Context Protocol) server exposing
-   121+ container orchestration tools for AI agents, with RBAC, rate limiting,
-   AES-256-GCM secrets management, and an audit hash chain.
+   161 container orchestration tools for AI agents, covering Docker
+   orchestration, hypervisor management (KVM/libvirt VM lifecycle, ZFS
+   storage, GPU passthrough, cloud-init), RBAC with argon2id, rate limiting,
+   AES-256-GCM secrets management, and a tamper-evident audit hash chain.
 
 2. Added deploy/container-mode/ — Docker, Caddy (TLS+WAF+rate limit), and
    one-click deployment configuration for container-mode operation.
@@ -34,6 +36,11 @@ The following modifications were made to the original CubeSandbox in this fork
 
 5. Modified Cubelet and CubeMaster for container-mode (non-MicroVM) operation
    with overlayfs storage and runc runtime.
+
+6. Added hypervisor layer — 32 tools for VM lifecycle (libvirt), ZFS storage
+   management, GPU passthrough (NVIDIA VFIO), and cloud-init provisioning,
+   with input validation across all attack surfaces (7 security audit rounds,
+   56 findings resolved).
 
 All modifications are Copyright (C) 2026 Brian Tomas Schwabauer and licensed
 under the Apache License, Version 2.0.

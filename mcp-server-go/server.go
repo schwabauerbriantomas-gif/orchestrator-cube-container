@@ -1,5 +1,5 @@
 // Package main: MCP server exposing Cube Container cluster operations.
-// 129 tools across the full DevOps lifecycle: containers, images, deploy,
+// 161 tools across the full DevOps lifecycle: containers, images, deploy,
 // scaling, health, networking, routing, secrets, backup, HA, multi-node,
 // environments, notifications, jobs, databases, certificates, events.
 //

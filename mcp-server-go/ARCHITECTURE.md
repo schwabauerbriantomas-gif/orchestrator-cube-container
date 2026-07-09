@@ -7,15 +7,16 @@
 ## Overview
 
 Cube Container is a container orchestration platform controlled entirely through
-MCP (Model Context Protocol). An AI agent communicates with it using 129 tools.
-There is no CLI, no web UI — the operations interface IS natural language.
+MCP (Model Context Protocol). An AI agent communicates with it using 161 tools.
+The primary operations interface IS natural language — a React web dashboard
+exists for status visualization, but all control flows through MCP.
 
 ```
 ┌──────────┐     ┌──────────────────────────────────────────┐     ┌──────────┐
 │ AI Agent │ ──► │ MCP Server (Go)                          │ ──► │ Backend  │
 │ (Claude, │     │                                          │     │ Docker / │
 │  GPT...) │     │  ┌─────────┐  ┌──────────┐  ┌────────┐  │     │ Cube     │
-│          │ ◄── │  │ 129     │  │ Auth +   │  │ 11     │  │     │ Engine   │
+│          │ ◄── │  │ 161     │  │ Auth +   │  │ 11     │  │     │ Engine   │
 │          │     │  │ Tools   │  │ RBAC +   │  │ Watch  │  │     │          │
 │          │     │  │         │  │ Rate     │  │ Loops  │  │     └──────────┘
 │          │     │  └─────────┘  │ Limit +  │  └────────┘  │
@@ -36,7 +37,7 @@ Every `.go` file falls into exactly one of these categories:
 | File | Responsibility |
 |------|---------------|
 | `server.go` | `main()`, manager initialization, HTTP middleware, stdio/HTTP mode |
-| `tools_registration.go` | Tool registration (`registerAllTools`), all 129 `registerTool` calls |
+| `tools_registration.go` | Tool registration (`registerAllTools`), all 161 `registerTool` calls |
 | `tools_helpers.go` | Tool builders, arg extraction, handler registry (for scheduled jobs) |
 | `handlers_basic.go` | Handlers for cluster, containers, templates, deploy, volumes, backup |
 | `handlers_phase2.go` | Handlers for images, deploy rollout, logs, envs, jobs, DBs, certs, events |
@@ -77,7 +78,8 @@ feature_name.go
 > attributed to the feature module that owns its business logic. The sum of
 > the "Tools" column below is 114; the remaining 15 tools (cluster health,
 > container CRUD, templates, exec, backend_info) have no dedicated feature
-> file — they call the backend directly from the handler. Total: **129**.
+> file — they call the backend directly from the handler. Additionally there
+> are 32 hypervisor tools (VM, ZFS, GPU, cloud-init). Total: **161**.
 
 | File | Feature | Tools |
 |------|---------|-------|
@@ -113,6 +115,11 @@ feature_name.go
 | `rollback.go` | Deployment versioning + rollback | 2 |
 | `logstream.go` | SSE log streaming endpoint + `tail_container_logs` | 2 |
 | `webhook.go` | Git webhook endpoint (`X-Git-Token` header auth, AS-5) | 1 |
+| `hypervisor.go` | VM lifecycle via libvirt (create, start, stop, snapshot, migrate) | 13 |
+| `hypervisor_zfs.go` | ZFS pool/dataset/snapshot/clone/rollback management | 12 |
+| `hypervisor_gpu.go` | GPU detection, stats, VFIO passthrough (NVIDIA/AMD/Intel) | 4 |
+| `hypervisor_cloudinit.go` | cloud-init user-data gen, ISO creation, template list | 3 |
+| `hypervisor_validate.go` | Input validators for all hypervisor tools (names, paths, PCI addresses) | — |
 
 #### 4. Security Layer
 

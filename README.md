@@ -1,10 +1,10 @@
 # Cube Container
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
-[![MCP Server](https://img.shields.io/badge/MCP-129%20tools-orange)](https://modelcontextprotocol.io)
+[![MCP Server](https://img.shields.io/badge/MCP-161%20tools-orange)](https://modelcontextprotocol.io)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8)](https://go.dev)
-[![Security Audit](https://img.shields.io/badge/Security-47%20issues%20fixed-red)](#security)
-[![Tests](https://img.shields.io/badge/Tests-40%20passing-brightgreen)](#testing)
+[![Security Audit](https://img.shields.io/badge/Security-56%20issues%20fixed-red)](#security)
+[![Tests](https://img.shields.io/badge/Tests-90%2B%20passing-brightgreen)](#testing)
 
 A container orchestration platform controlled by AI through the Model Context Protocol. An MCP server that replaces the DevOps role — the operations interface is natural language, not YAML.
 
@@ -510,7 +510,7 @@ Binary size: ~8.5MB (statically linked, no CGO).
 ```
 mcp-server-go/
 ├── server.go            — main(), managers, HTTP middleware, stdio/HTTP mode
-├── tools_registration.go — all 129 tool registrations via registerTool()
+├── tools_registration.go — all 161 tool registrations via registerTool()
 ├── tools_helpers.go     — tool builders, arg extraction, handler registry (jobs)
 ├── handlers_basic.go    — handlers: cluster, containers, templates, deploy, volumes, backup
 ├── handlers_phase2.go   — handlers: images, deploy, logs, envs, jobs, DBs, certs, events
