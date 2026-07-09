@@ -194,6 +194,14 @@ func handleVMCreateFromTemplate(_ context.Context, req mcp.CallToolRequest) (*mc
 	if err := validateFilePath(templatePath, defaultImageDir); err != nil {
 		return errResult(fmt.Sprintf("invalid template_path: %v", err)), nil
 	}
+	// R8-M04: validate seed_iso path
+	if err := validateFilePathOrEmpty(seedISO, defaultImageDir, defaultSeedDir); err != nil {
+		return errResult(fmt.Sprintf("invalid seed_iso: %v", err)), nil
+	}
+	// R8-H03: validate network name
+	if err := validateNetworkName(network); err != nil {
+		return errResult(fmt.Sprintf("invalid network: %v", err)), nil
+	}
 
 	// Verify template exists
 	if _, err := os.Stat(templatePath); err != nil {
@@ -274,12 +282,16 @@ func generateUserData(spec *CloudInitSpec) string {
 	if len(spec.SSHKeys) > 0 {
 		buf.WriteString("    ssh_authorized_keys:\n")
 		for _, key := range spec.SSHKeys {
+			if err := validateSSHKey(key); err != nil {
+				// Skip invalid keys rather than failing entire gen — caller validates
+				continue
+			}
 			buf.WriteString(fmt.Sprintf("      - %s\n", strings.TrimSpace(key)))
 		}
 	}
 	if spec.Password != "" {
 		buf.WriteString(fmt.Sprintf("    lock_passwd: false\n"))
-		buf.WriteString(fmt.Sprintf("    plain_text_passwd: %s\n", spec.Password))
+		buf.WriteString(fmt.Sprintf("    plain_text_passwd: %q\n", spec.Password))
 		buf.WriteString("    chpasswd: { expire: false }\n")
 	}
 
@@ -290,6 +302,9 @@ func generateUserData(spec *CloudInitSpec) string {
 	if len(spec.Packages) > 0 {
 		buf.WriteString("packages:\n")
 		for _, pkg := range spec.Packages {
+			if err := validatePackageName(pkg); err != nil {
+				continue // skip invalid package names
+			}
 			buf.WriteString(fmt.Sprintf("  - %s\n", pkg))
 		}
 	}

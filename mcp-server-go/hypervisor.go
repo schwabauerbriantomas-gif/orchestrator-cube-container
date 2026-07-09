@@ -194,6 +194,16 @@ func handleVMCreate(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolRe
 	if err := validateVMName(cfg.Name); err != nil {
 		return errResult(err.Error()), nil
 	}
+	// R8-H03: validate optional file paths to prevent XML injection
+	if err := validateFilePathOrEmpty(cfg.DiskPath, defaultImageDir); err != nil {
+		return errResult(fmt.Sprintf("invalid disk_path: %v", err)), nil
+	}
+	if err := validateFilePathOrEmpty(cfg.ISOPath, defaultImageDir); err != nil {
+		return errResult(fmt.Sprintf("invalid iso_path: %v", err)), nil
+	}
+	if err := validateNetworkName(cfg.Network); err != nil {
+		return errResult(fmt.Sprintf("invalid network: %v", err)), nil
+	}
 	if cfg.VCPU < 1 || cfg.VCPU > maxVCPUPerVM {
 		return errResult(fmt.Sprintf("vcpu must be between 1 and %d", maxVCPUPerVM)), nil
 	}
@@ -585,14 +595,14 @@ func generateDomainXML(cfg *VMConfig) (string, error) {
 		ISOPath    string
 		Network    string
 	}{
-		Name:       cfg.Name,
+		Name:       xmlEscape(cfg.Name),
 		DomainType: domainType,
 		CPUMode:    cpuMode,
 		MemKiB:     cfg.MemoryMB * 1024,
 		VCPU:       cfg.VCPU,
-		DiskPath:   diskPath,
-		ISOPath:    cfg.ISOPath,
-		Network:    cfg.Network,
+		DiskPath:   xmlEscape(diskPath),
+		ISOPath:    xmlEscape(cfg.ISOPath),
+		Network:    xmlEscape(cfg.Network),
 	}
 
 	tmpl, err := template.New("domain").Parse(domainXMLTemplate)

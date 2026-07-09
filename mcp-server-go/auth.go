@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -691,6 +692,16 @@ func (am *AuthMiddleware) Wrap(next http.Handler, toolExtractor func(*http.Reque
 		if toolExtractor != nil {
 			toolName = toolExtractor(r)
 		}
+		// R8-M02: fail-closed — if we can't extract a tool name from a tools/call
+		// request, reject it rather than letting mcp-go process it without authorization.
+		if toolName == "" && isToolsCallRequest(r) {
+			statusCode = 403
+			allowed = false
+			reason = "failed to extract tool name from request — RBAC check cannot be skipped"
+			writeJSONError(w, statusCode, reason)
+			am.logAudit(start, key, string(apiKey.Role), r, statusCode, allowed, reason, "")
+			return
+		}
 		if toolName != "" && !canExecute(apiKey.Role, toolName) {
 			statusCode = 403
 			allowed = false
@@ -739,8 +750,30 @@ func maskKey(key string) string {
 
 func randomHex(n int) string {
 	b := make([]byte, n)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// R8-M01: CSPRNG failure must panic — never produce predictable keys
+		log.Fatalf("crypto/rand failed: %v (system entropy source unavailable)", err)
+	}
 	return hex.EncodeToString(b)
+}
+
+// isToolsCallRequest checks if the request is a JSON-RPC tools/call.
+// Used by R8-M02 to fail-closed when tool name extraction fails.
+func isToolsCallRequest(r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	// Quick body peek without consuming it
+	if r.Body == nil {
+		return false
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return false
+	}
+	r.Body = io.NopCloser(strings.NewReader(string(body)))
+	// Check if this is a tools/call method
+	return strings.Contains(string(body), `"tools/call"`)
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
@@ -811,7 +844,14 @@ func (a *AuthAdminAPI) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(apiKey)
+	// R8-L01: Do not leak SecretHash in API response — only return what the caller needs.
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"key":        apiKey.Key,
+		"secret":     apiKey.Secret,
+		"role":       apiKey.Role,
+		"label":      apiKey.Label,
+		"created_at": apiKey.CreatedAt,
+	})
 }
 
 func (a *AuthAdminAPI) handleListKeys(w http.ResponseWriter, r *http.Request) {

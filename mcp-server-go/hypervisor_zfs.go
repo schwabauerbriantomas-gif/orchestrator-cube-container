@@ -121,6 +121,9 @@ func handleZPoolCreate(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToo
 	if err := validateZFSDatasetName(name); err != nil {
 		return errResult(err.Error()), nil
 	}
+	if err := validateDevicePath(devices); err != nil {
+		return errResult(err.Error()), nil
+	}
 
 	_, err := runZpool("create", name, devices)
 	if err != nil {
@@ -230,10 +233,16 @@ func handleZDatasetCreate(_ context.Context, req mcp.CallToolRequest) (*mcp.Call
 	args := []string{"create"}
 	compression := argString(req.GetArguments(), "compression")
 	if compression != "" {
+		if err := validateZFSCompression(compression); err != nil {
+			return errResult(err.Error()), nil
+		}
 		args = append(args, "-o", "compression="+compression)
 	}
 	recordSize := argString(req.GetArguments(), "recordsize")
 	if recordSize != "" {
+		if err := validateZFSRecordSize(recordSize); err != nil {
+			return errResult(err.Error()), nil
+		}
 		args = append(args, "-o", "recordsize="+recordSize)
 	}
 	args = append(args, name)

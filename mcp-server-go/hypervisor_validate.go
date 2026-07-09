@@ -18,6 +18,7 @@ import (
 	"net"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -204,3 +205,106 @@ const (
 	maxMemoryMBPerVM = 262144 // 256GB
 	maxDiskGBPerVM   = 8192   // 8TB
 )
+
+// ---- R8 audit validators ----
+
+// validateDevicePath validates a block device path for zpool create.
+// Must be /dev/-prefixed, no shell metacharacters, no path traversal.
+var reDevicePath = regexp.MustCompile(`^/dev/(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|loop[0-9]+|disk[0-9]+|md[0-9]+)(p[0-9]+)?$`)
+
+func validateDevicePath(devices string) error {
+	if devices == "" {
+		return fmt.Errorf("devices is required")
+	}
+	for _, dev := range strings.Fields(devices) {
+		if strings.HasPrefix(dev, "-") {
+			return fmt.Errorf("device path cannot start with '-' (argument injection)")
+		}
+		if !reDevicePath.MatchString(dev) {
+			return fmt.Errorf("invalid device path %q (must match /dev/sdX, /dev/nvmeXnY, etc.)", dev)
+		}
+	}
+	return nil
+}
+
+// validateZFSCompression validates ZFS compression property value.
+var allowedCompression = map[string]bool{
+	"on": true, "off": true, "lz4": true, "gzip": true,
+	"zstd": true, "lzjb": true,
+}
+
+func validateZFSCompression(val string) error {
+	if val == "" {
+		return nil
+	}
+	if !allowedCompression[strings.ToLower(val)] {
+		return fmt.Errorf("invalid compression value %q (allowed: on, off, lz4, gzip, zstd, lzjb)", val)
+	}
+	return nil
+}
+
+// validateZFSRecordSize validates ZFS recordsize property (power of 2, 512–1M).
+func validateZFSRecordSize(val string) error {
+	if val == "" {
+		return nil
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		return fmt.Errorf("recordsize must be numeric")
+	}
+	if n < 512 || n > 1048576 {
+		return fmt.Errorf("recordsize must be between 512 and 1048576")
+	}
+	// Check power of 2
+	if n&(n-1) != 0 {
+		return fmt.Errorf("recordsize must be a power of 2")
+	}
+	return nil
+}
+
+// validateFilePathOrEmpty validates a file path but allows empty (optional fields).
+func validateFilePathOrEmpty(path string, allowedDirs ...string) error {
+	if path == "" {
+		return nil
+	}
+	return validateFilePath(path, allowedDirs...)
+}
+
+// validateNetworkName validates a libvirt network name for domain XML.
+// Same charset as VM name.
+func validateNetworkName(name string) error {
+	if name == "" {
+		return nil // default is applied by caller
+	}
+	return validateVMName(name)
+}
+
+// validatePackageName validates a package name for cloud-init (apt/dnf safe).
+var rePackageName = regexp.MustCompile(`^[a-zA-Z0-9._:+-]+$`)
+
+func validatePackageName(pkg string) error {
+	if !rePackageName.MatchString(pkg) {
+		return fmt.Errorf("invalid package name %q (allowed: alphanumeric, ., _, :, +, -)", pkg)
+	}
+	return nil
+}
+
+// validateSSHKey validates an SSH public key format.
+var reSSHKey = regexp.MustCompile(`^(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)\s+[A-Za-z0-9+/=]+(\s+.+)?$`)
+
+func validateSSHKey(key string) error {
+	if !reSSHKey.MatchString(strings.TrimSpace(key)) {
+		return fmt.Errorf("invalid SSH key format")
+	}
+	return nil
+}
+
+// xmlEscape escapes XML special characters for safe interpolation in text/template.
+func xmlEscape(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "'", "&apos;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	return s
+}
