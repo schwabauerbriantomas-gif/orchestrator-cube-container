@@ -691,16 +691,16 @@ func (am *AuthMiddleware) Wrap(next http.Handler, toolExtractor func(*http.Reque
 		toolName := ""
 		if toolExtractor != nil {
 			toolName = toolExtractor(r)
-		}
-		// R8-M02: fail-closed — if we can't extract a tool name from a tools/call
-		// request, reject it rather than letting mcp-go process it without authorization.
-		if toolName == "" && isToolsCallRequest(r) {
-			statusCode = 403
-			allowed = false
-			reason = "failed to extract tool name from request — RBAC check cannot be skipped"
-			writeJSONError(w, statusCode, reason)
-			am.logAudit(start, key, string(apiKey.Role), r, statusCode, allowed, reason, "")
-			return
+			// R8-M02: fail-closed — if we can't extract a tool name from a tools/call
+			// request, reject it rather than letting mcp-go process it without authorization.
+			if toolName == "" && isToolsCallRequest(r) {
+				statusCode = 403
+				allowed = false
+				reason = "failed to extract tool name from request — RBAC check cannot be skipped"
+				writeJSONError(w, statusCode, reason)
+				am.logAudit(start, key, string(apiKey.Role), r, statusCode, allowed, reason, "")
+				return
+			}
 		}
 		if toolName != "" && !canExecute(apiKey.Role, toolName) {
 			statusCode = 403
