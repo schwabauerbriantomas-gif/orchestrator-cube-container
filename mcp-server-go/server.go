@@ -1,5 +1,7 @@
 // Package main: MCP server exposing Cube Container cluster operations.
-// Port of server.py — dual-mode stdio + HTTP, 22 tools.
+// 121 tools across the full DevOps lifecycle: containers, images, deploy,
+// scaling, health, networking, routing, secrets, backup, HA, multi-node,
+// environments, notifications, jobs, databases, certificates, events.
 package main
 
 import (
@@ -136,6 +138,24 @@ func main() {
 	// Start garbage collector (auto-prune when disk > threshold)
 	if gc != nil {
 		gc.Start()
+	}
+
+	// ---- Phase 2 managers (DevOps-complete feature set) ----
+	imageMgr = newImageManager(client)
+	rolloutMgr = newRolloutManager(client)
+	logAggMgr = newLogAggregationManager(client)
+	auditQueryMgr = newAuditQueryManager()
+	envMgr = newEnvironmentManager()
+	notifyMgr = newNotificationManager()
+	jobMgr = newJobManager()
+	metricsQueryMgr = newMetricsQueryManager(metricsCollector)
+	dbMgr = newDatabaseManager()
+	certMgr = newCertificateManager()
+	eventMgr = newEventManager()
+
+	// Start job scheduler
+	if jobMgr != nil {
+		jobMgr.Start()
 	}
 
 	s := server.NewMCPServer(
@@ -605,6 +625,149 @@ func registerAllTools(s *server.MCPServer) {
 	s.AddTool(toolWithArgs("configmap_remove", "Remove a ConfigMap permanently.",
 		mcp.WithString("name", mcp.Required()),
 	), handleConfigMapRemove)
+
+	// --- Image lifecycle (5) — CI/CD pipeline: build → push → pull → tag ---
+	s.AddTool(toolWithArgs("image_build", "Build a Docker image from a Dockerfile in a context directory. Sends the context as a tarball to the Docker build API. Args: context_dir (required, path to directory containing Dockerfile), tag (required, e.g. myapp:v1), dockerfile (default Dockerfile).",
+		mcp.WithString("context_dir", mcp.Required(), mcp.Description("Path to directory containing the Dockerfile")),
+		mcp.WithString("tag", mcp.Required(), mcp.Description("Image tag, e.g. myapp:v1")),
+		mcp.WithString("dockerfile", mcp.Description("Dockerfile filename (default: Dockerfile)")),
+	), handleImageBuild)
+	s.AddTool(toolWithArgs("image_push", "Push an image to a registry. The image is tagged with the registry prefix first. Args: tag (required), registry (optional, e.g. registry.example.com:5000).",
+		mcp.WithString("tag", mcp.Required()),
+		mcp.WithString("registry", mcp.Description("Registry URL (default: Docker Hub)")),
+	), handleImagePush)
+	s.AddTool(toolWithArgs("image_pull", "Pull an image from a registry. Args: tag (required, e.g. postgres:16-alpine).",
+		mcp.WithString("tag", mcp.Required()),
+	), handleImagePull)
+	s.AddTool(toolWithArgs("image_list", "List all Docker images on the node with tags, size, and creation date.",
+		mcp.WithString("filter", mcp.Description("Filter images by name pattern")),
+	), handleImageList)
+	s.AddTool(toolWithArgs("image_tag", "Tag an existing image with a new name:tag. Args: source_tag (required), target_tag (required).",
+		mcp.WithString("source_tag", mcp.Required()),
+		mcp.WithString("target_tag", mcp.Required()),
+	), handleImageTag)
+
+	// --- Rolling deployment (1) — zero-downtime image updates ---
+	s.AddTool(toolWithArgs("deploy_rollout", "Perform a rolling update of a service to a new image. Replaces replicas one-by-one (rolling) or all-at-once (blue-green), waiting for health checks between each. Aborts on failure if abort_on_failure=true. Args: service_name (required), new_image (required), strategy (rolling|blue-green, default rolling), health_wait_seconds (default 60), abort_on_failure (default true).",
+		mcp.WithString("service_name", mcp.Required()),
+		mcp.WithString("new_image", mcp.Required()),
+		mcp.WithString("strategy", mcp.Description("rolling or blue-green (default: rolling)")),
+		mcp.WithNumber("health_wait_seconds", mcp.Description("Seconds to wait for health check per replica (default: 60)")),
+	), handleDeployRollout)
+
+	// --- Log aggregation (2) — multi-container log search ---
+	s.AddTool(toolWithArgs("logs_search", "Search logs across ALL (or specified) containers by text pattern, severity level, or time range. Returns matching log lines sorted by recency. Args: pattern (text to search), containers (list of IDs, empty=all), level (error|warn|info|debug), since_minutes, max_results (default 100).",
+		mcp.WithString("pattern", mcp.Description("Text pattern to search for")),
+		mcp.WithString("level", mcp.Description("Filter by level: error, warn, info, debug")),
+		mcp.WithNumber("since_minutes", mcp.Description("Only search logs from last N minutes")),
+		mcp.WithNumber("max_results", mcp.Description("Max results (default 100)")),
+	), handleLogsSearch)
+	s.AddTool(toolWithArgs("logs_aggregate", "Aggregate log statistics across containers. Returns error/warn/info counts per container, sorted by error count. Args: containers (list of IDs, empty=all), since_lines (lines to analyze per container, default 200).",
+		mcp.WithString("level", mcp.Description("Aggregate specific level only")),
+	), handleLogsAggregate)
+
+	// --- Audit query (1) — investigate what happened ---
+	s.AddTool(toolWithArgs("audit_query", "Search the tamper-evident audit log. Every tool invocation is recorded with a hash chain. Query by time range, tool name, role, or success/failure. Args: since_hours (default 24), tool_name, role, success (true/false), limit (default 100).",
+		mcp.WithNumber("since_hours", mcp.Description("Hours of history to search (default: 24)")),
+		mcp.WithString("tool_name", mcp.Description("Filter by tool name")),
+		mcp.WithString("role", mcp.Description("Filter by caller role")),
+		mcp.WithNumber("limit", mcp.Description("Max results (default 100, max 1000)")),
+	), handleAuditQuery)
+
+	// --- Environments (4) — namespace isolation + promotion ---
+	s.AddTool(toolWithArgs("env_create", "Create an isolated environment (namespace) for managing deployments. Default environments (dev, staging, prod) are auto-created. Args: name (required), description, protected (bool).",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("description", mcp.Description("Environment description")),
+	), handleEnvCreate)
+	s.AddTool(tool("env_list", "List all environments with container counts."), handleEnvList)
+	s.AddTool(toolWithArgs("env_get", "Get details of a specific environment including its containers.",
+		mcp.WithString("name", mcp.Required()),
+	), handleEnvGet)
+	s.AddTool(toolWithArgs("env_promote", "Promote a container from one environment to the next (e.g. dev → staging → prod). Creates a new container in the target with the same image, then removes the source. Args: source_env (required), target_env (required), container_id (required).",
+		mcp.WithString("source_env", mcp.Required()),
+		mcp.WithString("target_env", mcp.Required()),
+		mcp.WithString("container_id", mcp.Required()),
+	), handleEnvPromote)
+
+	// --- Notifications (4) — alert delivery to external channels ---
+	s.AddTool(toolWithArgs("notify_channel_add", "Register a notification channel for alert delivery. Supports Slack, Discord, Telegram, and Email. Args: name (required), type (slack|discord|telegram|email, required), webhook_url (for slack/discord), bot_token + chat_id (for telegram), email_to + smtp_host (for email).",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("type", mcp.Required(), mcp.Description("slack, discord, telegram, or email")),
+		mcp.WithString("webhook_url", mcp.Description("Webhook URL for Slack/Discord")),
+		mcp.WithString("bot_token", mcp.Description("Telegram bot token")),
+		mcp.WithString("chat_id", mcp.Description("Telegram chat ID")),
+	), handleNotifyChannelAdd)
+	s.AddTool(tool("notify_channel_list", "List all configured notification channels."), handleNotifyChannelList)
+	s.AddTool(toolWithArgs("notify_channel_remove", "Remove a notification channel.",
+		mcp.WithString("channel_id", mcp.Required()),
+	), handleNotifyChannelRemove)
+	s.AddTool(toolWithArgs("notify_send", "Send a message to a notification channel. Args: channel_id (required), title (required), body (required), level (info|warning|critical).",
+		mcp.WithString("channel_id", mcp.Required()),
+		mcp.WithString("title", mcp.Required()),
+		mcp.WithString("body", mcp.Required()),
+		mcp.WithString("level", mcp.Description("info, warning, or critical")),
+	), handleNotifySend)
+
+	// --- API token management (3) — programmatic key rotation ---
+	s.AddTool(toolWithArgs("auth_create_token", "Create a new API token with a specified role. The secret is returned ONLY once — store it securely. Args: role (required: viewer|operator|admin), label.",
+		mcp.WithString("role", mcp.Required(), mcp.Description("viewer, operator, or admin")),
+		mcp.WithString("label", mcp.Description("Label for this token")),
+	), handleAuthCreateToken)
+	s.AddTool(tool("auth_list_tokens", "List all API tokens with metadata (no secrets shown)."), handleAuthListTokens)
+	s.AddTool(toolWithArgs("auth_revoke_token", "Revoke (disable) an API token by its key ID.",
+		mcp.WithString("key", mcp.Required()),
+	), handleAuthRevokeToken)
+
+	// --- Scheduled jobs (4) — periodic task automation ---
+	s.AddTool(toolWithArgs("job_create", "Create a scheduled job that runs an MCP tool periodically. Args: name (required), schedule (required, e.g. 'every 5m', 'hourly', 'daily', 'weekly'), tool (required, MCP tool name), args (object of tool arguments).",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("schedule", mcp.Required(), mcp.Description("every 5m, hourly, daily, weekly")),
+		mcp.WithString("tool", mcp.Required(), mcp.Description("MCP tool to call")),
+	), handleJobCreate)
+	s.AddTool(tool("job_list", "List all scheduled jobs with next run time and status."), handleJobList)
+	s.AddTool(toolWithArgs("job_remove", "Remove a scheduled job.",
+		mcp.WithString("job_id", mcp.Required()),
+	), handleJobRemove)
+	s.AddTool(toolWithArgs("job_run", "Run a scheduled job immediately (outside its schedule).",
+		mcp.WithString("job_id", mcp.Required()),
+	), handleJobRun)
+
+	// --- Metrics query (1) — programmatic metrics access ---
+	s.AddTool(toolWithArgs("metrics_query", "Query current cluster metrics (CPU, memory, requests, tool calls). Filter by metric name or container. Args: metric (name pattern), container (filter), limit (default 50).",
+		mcp.WithString("metric", mcp.Description("Metric name pattern to filter")),
+		mcp.WithString("container", mcp.Description("Filter by container ID")),
+		mcp.WithNumber("limit", mcp.Description("Max results (default 50)")),
+	), handleMetricsQuery)
+
+	// --- Database provisioning (3) — managed DB lifecycle ---
+	s.AddTool(toolWithArgs("database_create", "Provision a managed database (Postgres, MySQL, Redis, MongoDB). Creates container, persistent volume, health check, and stores credentials as a secret. Args: name (required), type (required: postgres|mysql|redis|mongodb), version (e.g. 16), memory_mb (default 512).",
+		mcp.WithString("name", mcp.Required()),
+		mcp.WithString("type", mcp.Required(), mcp.Description("postgres, mysql, redis, mongodb")),
+		mcp.WithString("version", mcp.Description("Image version tag (e.g. 16)")),
+		mcp.WithNumber("memory_mb", mcp.Description("Memory limit in MB (default 512)")),
+	), handleDatabaseCreate)
+	s.AddTool(toolWithArgs("database_backup", "Create a backup of a managed database's volume.",
+		mcp.WithString("database_id", mcp.Required()),
+	), handleDatabaseBackup)
+	s.AddTool(toolWithArgs("database_restore", "Restore a managed database from a backup.",
+		mcp.WithString("database_id", mcp.Required()),
+		mcp.WithString("backup_id", mcp.Required()),
+	), handleDatabaseRestore)
+
+	// --- Certificates (2) — TLS visibility ---
+	s.AddTool(tool("cert_list", "List all TLS certificates with expiry dates and renewal status. Scans Caddy certificate store and CUBE_TLS_CERT."), handleCertList)
+	s.AddTool(toolWithArgs("cert_renew", "Trigger certificate renewal check by reloading Caddy. Caddy auto-renews certs expiring within 30 days.",
+		mcp.WithString("domain", mcp.Required()),
+	), handleCertRenew)
+
+	// --- Events (2) — cluster event stream ---
+	s.AddTool(toolWithArgs("events_list", "List recent cluster events (container starts/stops, deploys, scaling, health failures, alerts). Filter by type, severity, or time range. Args: event_type, severity (info|warning|critical), since_minutes, limit (default 50).",
+		mcp.WithString("event_type", mcp.Description("Filter by event type")),
+		mcp.WithString("severity", mcp.Description("Filter: info, warning, critical")),
+		mcp.WithNumber("since_minutes", mcp.Description("Events from last N minutes")),
+		mcp.WithNumber("limit", mcp.Description("Max results (default 50)")),
+	), handleEventsList)
+	s.AddTool(tool("events_recent", "Get the 20 most recent cluster events across all types."), handleEventsRecent)
 }
 
 // ---- Tool builders ----
@@ -712,8 +875,11 @@ func handleBackendInfo(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolR
 		"features": []string{
 			"container_lifecycle", "templates", "deploy_from_git", "deploy_from_code",
 			"volumes", "backup", "rollback", "routing_tls", "networking", "exec",
+			"images", "rolling_deploy", "log_aggregation", "audit_trail",
+			"environments", "notifications", "auth_tokens", "scheduled_jobs",
+			"metrics_query", "database_provisioning", "certificates", "events",
 		},
-		"tool_count": 44,
+		"tool_count": 121,
 	}
 	return okResult(info), nil
 }

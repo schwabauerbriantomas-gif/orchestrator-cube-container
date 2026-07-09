@@ -142,6 +142,50 @@ var toolPermissions = map[string]Role{
 	"configmap_get":    RoleViewer,
 	"configmap_list":   RoleViewer,
 	"configmap_remove": RoleAdmin,
+	// Image lifecycle — operator to build/pull/tag, admin to push
+	"image_build": RoleOperator,
+	"image_push":  RoleAdmin,
+	"image_pull":  RoleOperator,
+	"image_list":  RoleViewer,
+	"image_tag":   RoleOperator,
+	// Rolling deployment — operator to rollout
+	"deploy_rollout": RoleOperator,
+	// Log aggregation — viewer to search/aggregate
+	"logs_search":    RoleViewer,
+	"logs_aggregate": RoleViewer,
+	// Audit query — viewer to read audit trail
+	"audit_query": RoleViewer,
+	// Environments — admin to create/remove, viewer to list/get, operator to promote
+	"env_create":  RoleAdmin,
+	"env_list":    RoleViewer,
+	"env_get":     RoleViewer,
+	"env_promote": RoleOperator,
+	// Notifications — admin to manage channels, operator to send
+	"notify_channel_add":    RoleAdmin,
+	"notify_channel_list":   RoleViewer,
+	"notify_channel_remove": RoleAdmin,
+	"notify_send":           RoleOperator,
+	// API tokens — admin only
+	"auth_create_token": RoleAdmin,
+	"auth_list_tokens":  RoleAdmin,
+	"auth_revoke_token": RoleAdmin,
+	// Scheduled jobs — admin to create/remove, operator to run
+	"job_create": RoleAdmin,
+	"job_list":   RoleViewer,
+	"job_remove": RoleAdmin,
+	"job_run":    RoleOperator,
+	// Metrics query — viewer
+	"metrics_query": RoleViewer,
+	// Database provisioning — admin to create/restore, operator to backup
+	"database_create":  RoleAdmin,
+	"database_backup":  RoleOperator,
+	"database_restore": RoleAdmin,
+	// Certificates — viewer to list, admin to renew
+	"cert_list":  RoleViewer,
+	"cert_renew": RoleAdmin,
+	// Events — viewer
+	"events_list":   RoleViewer,
+	"events_recent": RoleViewer,
 }
 
 // roleLevel returns a numeric level for comparison (higher = more permissions).
