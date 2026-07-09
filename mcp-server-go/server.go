@@ -106,6 +106,12 @@ func main() {
 	// Volume lifecycle — attach/detach/migrate beyond basic create/delete
 	volumeMgr = newVolumeManager(deploy, client)
 
+	// Resource limits — enforce memory/CPU quotas on containers
+	resourceMgr = newResourceManager()
+
+	// Garbage collector — prevent disk exhaustion on edge nodes
+	gc = newGarbageCollector()
+
 	// Secrets manager (optional — degrades gracefully if key unavailable)
 	sm, err := newSecretsManager()
 	if err != nil {
@@ -125,6 +131,11 @@ func main() {
 	// Start alert watcher (evaluate monitoring rules)
 	if alertMgr != nil {
 		alertMgr.Start()
+	}
+
+	// Start garbage collector (auto-prune when disk > threshold)
+	if gc != nil {
+		gc.Start()
 	}
 
 	s := server.NewMCPServer(
@@ -365,6 +376,23 @@ func registerAllTools(s *server.MCPServer) {
 	s.AddTool(toolWithArgs("volume_info", "Get detailed volume info: size, file count, attached containers.",
 		mcp.WithString("volume_name", mcp.Required()),
 	), handleVolumeInfo)
+
+	// --- Resource limits (4) ---
+	s.AddTool(toolWithArgs("resource_set_limits", "Apply hard memory and CPU limits to a running container via docker update. Limits are persisted and re-applied on restart.",
+		mcp.WithString("container_id", mcp.Required()),
+		mcp.WithNumber("memory_mb", mcp.Description("Memory limit in MB")),
+		mcp.WithNumber("cpu_count", mcp.Description("CPU cores (e.g. 0.5, 1.0, 2.0)")),
+	), handleResourceSetLimits)
+	s.AddTool(toolWithArgs("resource_get_usage", "Get real-time CPU, memory, network, and disk I/O usage for a specific container.",
+		mcp.WithString("container_id", mcp.Required()),
+	), handleResourceGetUsage)
+	s.AddTool(tool("resource_list_usage", "Get real-time resource usage for ALL running containers. Returns CPU%, memory, network I/O, and PID count per container."), handleResourceListUsage)
+	s.AddTool(tool("resource_quota_summary", "Get aggregated resource allocation vs node capacity: total allocated memory/CPU, utilization percentage, and remaining headroom."), handleResourceQuotaSummary)
+
+	// --- Garbage collection (3) ---
+	s.AddTool(tool("gc_prune_images", "Remove unused and dangling Docker images older than 7 days. Frees disk space on edge nodes with limited storage."), handleGCPruneImages)
+	s.AddTool(tool("gc_prune_volumes", "Remove orphaned Docker volumes not attached to any running container. Also identifies deploy-managed volumes with no active container."), handleGCPruneVolumes)
+	s.AddTool(tool("gc_disk_usage", "Show disk usage breakdown: images, containers, volumes — total count, active, size, and reclaimable space."), handleGCDiskUsage)
 
 	// --- Backup & Restore (5) ---
 	s.AddTool(toolWithArgs("backup_volume", "Create a tar.gz backup of a volume with SHA256 integrity check. Backup is stored locally and can be restored later.",

@@ -66,6 +66,15 @@ var toolPermissions = map[string]Role{
 	"volume_detach":  RoleOperator,
 	"volume_migrate": RoleAdmin,
 	"volume_info":    RoleViewer,
+	// Resource limits — operator to set, viewer to read
+	"resource_set_limits":   RoleOperator,
+	"resource_get_usage":    RoleViewer,
+	"resource_list_usage":   RoleViewer,
+	"resource_quota_summary": RoleViewer,
+	// Garbage collection — operator to prune, viewer to check
+	"gc_prune_images":  RoleOperator,
+	"gc_prune_volumes": RoleOperator,
+	"gc_disk_usage":    RoleViewer,
 	// Backup — operator to create/list, admin to delete/restore
 	"backup_volume":     RoleOperator,
 	"backup_container":  RoleOperator,
