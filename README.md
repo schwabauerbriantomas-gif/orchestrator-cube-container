@@ -2,9 +2,10 @@
 
 [![Fork of TencentCloud/CubeSandbox](https://img.shields.io/badge/fork%20of-CubeSandbox-blue)](https://github.com/TencentCloud/CubeSandbox)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
-[![MCP Server](https://img.shields.io/badge/MCP-50%20tools-orange)](https://modelcontextprotocol.io)
+[![MCP Server](https://img.shields.io/badge/MCP-89%20tools-orange)](https://modelcontextprotocol.io)
 [![Min RAM: 4GB](https://img.shields.io/badge/Min%20RAM-4GB-success)]()
 [![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8)]()
+[![CI](https://img.shields.io/badge/CI-7%20jobs-blue)]()
 
 **Container-mode fork of [CubeSandbox](https://github.com/TencentCloud/CubeSandbox)** — the same control plane, E2B-compatible API, and MCP orchestration, but running on **native Linux containers (containerd + runc + overlayfs)** instead of KVM MicroVMs.
 
@@ -61,9 +62,9 @@ Runs on COTS mini-PCs, ARM SBCs, recycled office machines, Proxmox VMs, or any L
 
 ### What Was Added
 
-- ✅ **MCP Server** (Go) — **50 tools** for AI-agent-driven orchestration, single static binary
+- ✅ **MCP Server** (Go) — **89 tools** for AI-agent-driven orchestration, single static binary
 - ✅ **Dual Backend** — auto-detects Docker (production) or Cube (edge 4GB) at runtime
-- ✅ **Auth + RBAC** (Go) — API-key + secret auth, RBAC (viewer/operator/admin), rate limiting, JSONL audit trail with SHA256 hash chain — built into MCP server
+- ✅ **Auth + RBAC** (Go) — API-key + secret auth, RBAC (viewer/operator/admin), rate limiting, JSONL audit trail with SHA256 hash chain
 - ✅ **HA Active-Passive** — heartbeat-based failover with HMAC auth + priority-based split-brain resolution
 - ✅ **Encrypted Secrets** — AES-256-GCM at rest, 3 key sources (hex key, passphrase, auto-generated)
 - ✅ **Zero-Config TLS** — Caddy route generation with automatic Let's Encrypt certificates
@@ -74,7 +75,16 @@ Runs on COTS mini-PCs, ARM SBCs, recycled office machines, Proxmox VMs, or any L
 - ✅ **Metrics** — Prometheus `/metrics` endpoint with live cluster state
 - ✅ **Log Streaming** — SSE endpoint for real-time container log tailing
 - ✅ **4D Scheduling** — bin-packing node suggestions based on CPU, RAM, disk, network
-- ✅ **Security Hardened** — 18 attack surfaces audited and closed (allowlist exec, SSRF prevention, timing-attack resistant auth, per-IP connection limits)
+- ✅ **Health Checks + Auto-Restart** — HTTP/TCP/exec probes, automatic container restart on consecutive failures
+- ✅ **Multi-Node Cluster** — node registry, remote deploy, SSRF-protected inter-node communication
+- ✅ **Horizontal Scaling** — replica groups with automatic Caddy load balancing (round-robin + health checks)
+- ✅ **Volume Lifecycle** — attach/detach/migrate volumes, cross-node migration via tar+scp
+- ✅ **Service Discovery** — logical name → endpoint registry with auto-sync from container labels
+- ✅ **Resource Limits** — hard cgroup limits (memory/CPU) via `docker update`, real-time usage stats
+- ✅ **Garbage Collection** — automatic image pruning, disk usage monitoring, auto-prune at threshold
+- ✅ **Alerting** — rule-based monitoring (container_down, CPU/disk/mem) with webhook notifications
+- ✅ **ConfigMaps** — non-sensitive configuration data (env vars, feature flags)
+- ✅ **Security Hardened** — 26 attack surfaces audited and closed (allowlist exec, SSRF prevention, argument injection prevention, timing-attack resistant auth, per-IP connection limits, path traversal prevention, mount path validation)
 
 ---
 
@@ -87,7 +97,7 @@ Runs on COTS mini-PCs, ARM SBCs, recycled office machines, Proxmox VMs, or any L
  │                      LOCAL (trusted)                         │
  │                                                              │
  │  AI Agent ──stdio──▶ MCP Server ──▶ ContainerBackend         │
- │  (Hermes,           (Go, 50 tools)   ├── Docker (unix sock)  │
+ │  (Hermes,           (Go, 89 tools)  ├── Docker (unix sock)  │
  │   Claude,                            └── Cube (HTTP :3000)   │
  │   Cursor)                                   │                │
  │                                              ▼                │
@@ -121,9 +131,18 @@ Runs on COTS mini-PCs, ARM SBCs, recycled office machines, Proxmox VMs, or any L
  └─────────────────────────────────────────────────────────────┘
 ```
 
-### Backend auto-detection
+### Background watchers
 
-The MCP server probes the environment at startup and selects the best backend:
+The MCP server runs several goroutine watchers in HTTP mode:
+
+| Watcher | Interval | Purpose |
+|---------|----------|---------|
+| Health watcher | 5s | Runs probes, restarts failed containers |
+| Alert watcher | 30s | Evaluates monitoring rules, fires webhooks |
+| GC watcher | 1h | Checks disk usage, auto-prunes images if > 85% |
+| HA heartbeat | 2s | Active-passive failover coordination |
+
+### Backend auto-detection
 
 ```
 1. CUBE_BACKEND=docker  → force Docker
@@ -132,23 +151,19 @@ The MCP server probes the environment at startup and selects the best backend:
 4. fallback             → Cube (lighter, for edge 4GB)
 ```
 
-The model always knows which runtime is active via the `backend_info` tool.
-
 ### Security layer separation
 
 | Layer | Where | Applies to |
 |-------|-------|------------|
-| Input validation (path traversal, git sanitization, **command allowlist**, SSRF prevention) | `security.go` — MCP server | **Both** modes |
+| Input validation (path traversal, git sanitization, **command allowlist**, SSRF prevention, **argument injection prevention**, **mount path validation**) | `security.go` | **Both** modes |
 | TLS 1.3 + WAF + rate limiting | `Caddyfile` — Caddy proxy | HTTP mode only |
-| API-key auth + RBAC + audit | `auth.go` — built into MCP server | HTTP mode only |
-| Encrypted secrets (AES-256-GCM) | `secrets.go` — MCP server | Both modes |
-| HA heartbeat auth (HMAC-SHA256) | `ha.go` — MCP server | HTTP mode only |
-
-This means: local stdio mode has zero auth overhead (it's a pipe), while HTTP mode gets full production-grade security.
+| API-key auth + RBAC + audit | `auth.go` | HTTP mode only |
+| Encrypted secrets (AES-256-GCM) | `secrets.go` | Both modes |
+| HA heartbeat auth (HMAC-SHA256) | `ha.go` | HTTP mode only |
 
 ---
 
-## MCP Tools (50 total)
+## MCP Tools (89 total)
 
 Any MCP-compatible AI agent (Claude, Cursor, Hermes, OpenAI agents, local LLMs) can manage the entire cluster through natural language.
 
@@ -158,10 +173,10 @@ Any MCP-compatible AI agent (Claude, Cursor, Hermes, OpenAI agents, local LLMs) 
 |------|-------------|
 | `cluster_health` | Check CubeAPI reachability |
 | `cluster_overview` | Node count, running containers, resource capacity |
-| `cluster_versions` | Component version matrix (CubeAPI, CubeMaster, Cubelet) |
+| `cluster_versions` | Component version matrix |
 | `list_nodes` | All nodes with CPU/RAM/disk info |
 | `get_node` | Detailed node info by ID |
-| `suggest_node` | 4D bin-packing: best node for new container based on CPU/RAM/disk/net |
+| `suggest_node` | 4D bin-packing: best node for new container |
 
 ### Container Lifecycle (8)
 
@@ -171,81 +186,154 @@ Any MCP-compatible AI agent (Claude, Cursor, Hermes, OpenAI agents, local LLMs) 
 | `get_container` | Container details by ID |
 | `create_container` | Deploy from template with CPU/RAM/env config |
 | `kill_container` | Stop and remove |
-| `pause_container` | Freeze (cgroup freezer, ~0 CPU, ~15ms to resume) |
+| `pause_container` | Freeze (cgroup freezer, ~0 CPU) |
 | `resume_container` | Thaw a paused container |
 | `get_container_logs` | Fetch stdout/stderr logs |
-| `tail_container_logs` | Last N log lines (for real-time use SSE `/streams/{id}/logs`) |
+| `tail_container_logs` | Last N log lines |
 
 ### Templates (3)
 
 | Tool | Description |
 |------|-------------|
 | `list_templates` | Available container templates |
-| `create_template` | Create from any OCI image with port mappings |
+| `create_template` | Create from any OCI image |
 | `get_template` | Template details |
 
 ### Persistent Deployment (4)
 
 | Tool | Description |
 |------|-------------|
-| `deploy_from_git` | Clone repo, build image, deploy with env vars + volumes |
-| `deploy_from_code` | Deploy from inline files (no git needed) |
+| `deploy_from_git` | Clone repo, build, deploy with volumes |
+| `deploy_from_code` | Deploy from inline files |
 | `update_code` | Pull latest from git and redeploy |
-| `exec_in_container` | Run command inside a running container (allowlist-enforced) |
+| `exec_in_container` | Run command inside container (allowlist-enforced) |
 
-### Volumes (3)
+### Volumes (7)
 
 | Tool | Description |
 |------|-------------|
 | `list_volumes` | Persistent volumes across the cluster |
 | `create_volume` | Create a named volume |
 | `delete_volume` | Remove a volume |
+| `volume_attach` | Attach volume to a running container at a mount path |
+| `volume_detach` | Detach volume from a container (data preserved) |
+| `volume_migrate` | Migrate volume to a remote node via tar+scp |
+| `volume_info` | Detailed info: size, file count, attached containers |
 
 ### Backup & Restore (5)
 
 | Tool | Description |
 |------|-------------|
-| `backup_volume` | tar.gz with SHA256 integrity, point-in-time staging copy |
-| `backup_container` | Full snapshot: config manifest + all mounted volumes |
-| `list_backups` | All backups with size, checksum, restorable status |
-| `restore_backup` | Restore with SHA256 verification before unpacking |
+| `backup_volume` | tar.gz with SHA256 integrity, point-in-time staging |
+| `backup_container` | Full snapshot: config manifest + all volumes |
+| `list_backups` | All backups with size, checksum, status |
+| `restore_backup` | Restore with SHA256 verification |
 | `delete_backup` | Remove a backup permanently |
 
 ### Deployment Versioning (2)
 
 | Tool | Description |
 |------|-------------|
-| `rollback_deploy` | Rollback to previous deployment version (git-based) |
+| `rollback_deploy` | Rollback to previous deployment version |
 | `list_deploy_versions` | List all deployment versions for an app |
 
 ### Routing & TLS (4)
 
 | Tool | Description |
 |------|-------------|
-| `create_route` | Domain → container reverse proxy with automatic Let's Encrypt TLS |
-| `delete_route` | Remove a domain route and its TLS certificate |
-| `list_routes` | All configured domain routes with TLS status |
+| `create_route` | Domain → container reverse proxy with auto TLS |
+| `delete_route` | Remove a domain route |
+| `list_routes` | All configured domain routes |
 | `reload_routes` | Force regenerate Caddy config and reload |
 
 ### Networking (9)
 
 | Tool | Description |
 |------|-------------|
-| `add_port_mapping` | Map host port to container port (iptables-backed) |
-| `remove_port_mapping` | Remove a port mapping by ID |
+| `add_port_mapping` | Map host port to container port |
+| `remove_port_mapping` | Remove a port mapping |
 | `list_port_mappings` | All port mappings |
-| `add_dns_alias` | Add DNS alias to `/etc/hosts` (IP-validated) |
+| `add_dns_alias` | Add DNS alias to /etc/hosts (IP-validated) |
 | `remove_dns_alias` | Remove a DNS alias |
 | `list_dns_aliases` | All DNS aliases |
 | `add_network_policy` | Allow/deny firewall rule between containers |
 | `list_network_policies` | All network policies |
-| `remove_network_policy` | Remove a network policy by ID |
+| `remove_network_policy` | Remove a network policy |
 
-### High Availability (1)
+### Multi-Node Cluster (6)
 
-| Tool | Description |
-|------|-------------|
-| `ha_state` | Current HA state: role (active/standby), active node, peer health |
+| Tool | RBAC | Description |
+|------|------|-------------|
+| `node_add` | admin | Register a new cluster node |
+| `node_update` | admin | Update node properties (address, state, resources) |
+| `node_remove` | admin | Remove a node from the registry |
+| `node_list` | viewer | List all cluster nodes |
+| `node_get` | viewer | Detailed node information |
+| `deploy_to_node` | operator | Deploy a container to a specific remote node |
+
+### Horizontal Scaling (5)
+
+| Tool | RBAC | Description |
+|------|------|-------------|
+| `service_create` | admin | Define a scalable service (replica group) |
+| `scale_set` | operator | Set exact replica count (creates/removes containers) |
+| `service_list` | viewer | List all scalable services |
+| `service_get` | viewer | Service details with container IDs |
+| `service_remove` | admin | Remove a service definition |
+
+### Service Discovery (4)
+
+| Tool | RBAC | Description |
+|------|------|-------------|
+| `service_register` | operator | Register logical name → endpoint |
+| `service_deregister` | operator | Remove a service entry |
+| `service_resolve` | viewer | Look up a service by name → host:port |
+| `service_entries` | viewer | List all discovery entries (sync from container labels) |
+
+### Health Checks (4)
+
+| Tool | RBAC | Description |
+|------|------|-------------|
+| `health_check_set` | operator | Configure HTTP/TCP/exec probe for a container |
+| `health_check_remove` | operator | Remove a health check |
+| `health_check_list` | viewer | All checks with status and restart counts |
+| `health_check_status` | viewer | Detailed health status for one container |
+
+### Resource Limits (4)
+
+| Tool | RBAC | Description |
+|------|------|-------------|
+| `resource_set_limits` | operator | Apply hard memory/CPU limits via docker update |
+| `resource_get_usage` | viewer | Real-time CPU/memory/IO for one container |
+| `resource_list_usage` | viewer | Usage for all running containers |
+| `resource_quota_summary` | viewer | Allocated vs node capacity |
+
+### Garbage Collection (3)
+
+| Tool | RBAC | Description |
+|------|------|-------------|
+| `gc_prune_images` | operator | Remove unused images older than 7 days |
+| `gc_prune_volumes` | operator | Remove orphaned volumes (manual, not auto) |
+| `gc_disk_usage` | viewer | Disk breakdown: images, containers, volumes |
+
+### Alerting (4)
+
+| Tool | RBAC | Description |
+|------|------|-------------|
+| `alert_rule_add` | admin | Create monitoring rule (container_down, CPU/disk/mem) |
+| `alert_rule_remove` | admin | Remove an alert rule |
+| `alert_list` | viewer | All rules with fire count and last fired |
+| `alert_test` | operator | Fire a test alert to verify webhook |
+
+### ConfigMaps (5)
+
+| Tool | RBAC | Description |
+|------|------|-------------|
+| `configmap_create` | admin | Create non-sensitive config data (env vars, flags) |
+| `configmap_update` | admin | Update/merge config data |
+| `configmap_get` | viewer | Get config data values |
+| `configmap_list` | viewer | List all ConfigMaps |
+| `configmap_remove` | admin | Remove a ConfigMap |
 
 ### Secrets Management (4)
 
@@ -256,30 +344,29 @@ Any MCP-compatible AI agent (Claude, Cursor, Hermes, OpenAI agents, local LLMs) 
 | `secret_list` | viewer | List secret names + metadata (no values) |
 | `secret_delete` | admin | Permanently delete a secret |
 
-### Backend Introspection (1)
+### HA + Backend (2)
 
 | Tool | Description |
 |------|-------------|
-| `backend_info` | Active backend (docker/cube), endpoint, tool count, capabilities |
+| `ha_state` | Current HA state: role, active node, peer health |
+| `backend_info` | Active backend, endpoint, capabilities |
 
 ---
 
 ## Quick Start
 
-### Build the MCP server from source
+### Build the MCP server
 
 ```bash
 cd mcp-server-go
 CGO_ENABLED=0 go build -o cube-mcp .
-# Produces a single ~7MB static binary — no runtime dependencies
+# Single ~8MB static binary
 ```
 
-### Run in stdio mode (local, trusted)
+### Run in stdio mode (local)
 
 ```bash
 ./cube-mcp
-# [cube-mcp] backend auto-detected → docker (or cube)
-# [cube-mcp] stdio mode → backend=docker endpoint=/var/run/docker.sock
 ```
 
 ### Configure your MCP client
@@ -298,48 +385,19 @@ CGO_ENABLED=0 go build -o cube-mcp .
 }
 ```
 
-### Run in HTTP mode (production, untrusted)
+### Run in HTTP mode (production)
 
 ```bash
 # Generate an admin API key
 ./cube-mcp --gen-key admin --label "production-admin"
-# → Key:    cc_live_a1b2c3d4...
-# → Secret: sec_e5f6g7h8...
 
 # Start the server
 ./cube-mcp --mode http --port 8080
 
-# Optionally with native TLS (bypass Caddy)
+# With native TLS
 CUBE_TLS_CERT=/path/to/cert.pem \
 CUBE_TLS_KEY=/path/to/key.pem \
 ./cube-mcp --mode http --port 8443
-```
-
-### Deploy a service from git (via MCP)
-
-```
-User: "Deploy the app at github.com/me/my-api on port 8000"
-
-Agent → deploy_from_git(
-    git_url="https://github.com/me/my-api",
-    expose_ports=[8000],
-    memory_mb=256
-)
-→ Container running at node-2:8000
-```
-
-### Expose with automatic TLS
-
-```
-User: "Route api.myapp.com to container abc123 on port 8000"
-
-Agent → create_route(
-    domain="api.myapp.com",
-    container_id="abc123",
-    target_port=8000
-)
-→ Caddy provisions Let's Encrypt certificate automatically
-→ Route live at https://api.myapp.com
 ```
 
 ---
@@ -352,167 +410,136 @@ All configuration is via environment variables. No config files needed.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CUBE_BACKEND` | auto | `docker`, `cube`, or `auto` (auto-detect) |
-| `CUBE_API_URL` | `http://localhost:3000` | CubeAPI URL (Cube backend only) |
-| `CUBE_API_KEY` | `e2b_000000` | CubeAPI key (Cube backend only) |
-| `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker socket path (Docker backend) |
+| `CUBE_BACKEND` | auto | `docker`, `cube`, or `auto` |
+| `CUBE_API_URL` | `http://localhost:3000` | CubeAPI URL |
+| `CUBE_API_KEY` | `e2b_000000` | CubeAPI key |
+| `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker socket path |
 
 ### Security
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CUBE_AUTH_KEYS_FILE` | `/var/lib/cube-container/auth-keys.json` | API key store |
-| `CUBE_AUDIT_LOG` | `/var/lib/cube-container/audit.logl` | Audit log path |
-| `CUBE_EXEC_ALLOWLIST` | *(built-in list)* | Comma-separated extra allowed exec commands |
-| `CUBE_ALLOW_INSECURE_GIT` | `false` | Allow `http://` and `git://` protocols (otherwise https+ssh only) |
-| `CUBE_TLS_CERT` | *(empty)* | Path to TLS cert for native HTTPS |
-| `CUBE_TLS_KEY` | *(empty)* | Path to TLS key for native HTTPS |
+| `CUBE_AUDIT_LOG` | `/var/lib/cube-container/audit.logl` | Audit log |
+| `CUBE_EXEC_ALLOWLIST` | *(built-in)* | Extra allowed exec commands |
+| `CUBE_ALLOW_INSECURE_GIT` | `false` | Allow http:// and git:// |
+| `CUBE_TLS_CERT` | *(empty)* | TLS cert for native HTTPS |
+| `CUBE_TLS_KEY` | *(empty)* | TLS key for native HTTPS |
 
 ### Secrets
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CUBE_SECRETS_KEY` | *(empty)* | Hex-encoded 32-byte AES key (highest priority) |
-| `CUBE_SECRETS_PASSPHRASE` | *(empty)* | Derive key from passphrase (PBKDF2, 100K iterations) |
-| `CUBE_SECRETS_FILE` | `/var/lib/cube-container/secrets.json` | Encrypted secrets store |
-| `CUBE_SECRETS_KEY_FILE` | `/var/lib/cube-container/keys/secrets.key` | Auto-generated key path |
-| `CUBE_SECRETS_SALT_FILE` | `/var/lib/cube-container/keys/secrets.salt` | Auto-generated salt path |
+| `CUBE_SECRETS_KEY` | *(empty)* | Hex-encoded 32-byte AES key |
+| `CUBE_SECRETS_PASSPHRASE` | *(empty)* | Derive key via PBKDF2 |
+| `CUBE_SECRETS_FILE` | `/var/lib/cube-container/secrets.json` | Encrypted store |
+| `CUBE_SECRETS_KEY_FILE` | `/var/lib/cube-container/keys/secrets.key` | Auto-gen key |
+| `CUBE_SECRETS_SALT_FILE` | `/var/lib/cube-container/keys/secrets.salt` | Auto-gen salt |
 
 ### High Availability
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CUBE_HA_PEERS` | *(empty)* | Comma-separated `host:port` list of CubeMaster peers |
+| `CUBE_HA_PEERS` | *(empty)* | Comma-separated peer addresses |
 | `CUBE_HA_SELF_ID` | hostname | This node's unique ID |
-| `CUBE_HA_ROLE` | auto | `active`, `standby`, or auto (active if no peers) |
-| `CUBE_HA_PRIORITY` | `100` | Lower wins split-brain (0 = highest) |
-| `CUBE_HA_SECRET` | *(empty)* | HMAC-SHA256 shared secret for heartbeat auth |
+| `CUBE_HA_PRIORITY` | `100` | Lower wins split-brain |
+| `CUBE_HA_SECRET` | *(empty)* | HMAC-SHA256 heartbeat secret |
 
 ### Routing & TLS
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CUBE_CADDY_CONFIG_PATH` | `/etc/caddy/cube-routes.caddy` | Generated Caddy route fragment |
-| `CUBE_CADDY_MAIN_CONFIG` | `/etc/caddy/Caddyfile` | Main Caddyfile for reload |
-| `CUBE_CADDY_RELOAD` | `false` | Invoke `caddy reload` after route changes |
-| `CUBE_ROUTES_ROOT` | `/var/lib/cube-container/routes` | Route JSON store |
+| `CUBE_CADDY_CONFIG_PATH` | `/etc/caddy/cube-routes.caddy` | Route fragment |
+| `CUBE_CADDY_RELOAD` | `false` | Auto-reload Caddy after route changes |
+| `CUBE_ROUTES_ROOT` | `/var/lib/cube-container/routes` | Route store |
+
+### Multi-Node + Inter-Node TLS
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CUBE_CUBE_TLS` | `false` | Enable HTTPS for remote CubeAPI nodes |
+| `CUBE_DOCKER_TLS` | `false` | Enable TLS for remote Docker TCP connections |
+
+### Garbage Collection
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CUBE_GC_ENABLED` | `true` | Enable background GC watcher |
+| `CUBE_GC_THRESHOLD` | `85` | Disk usage % that triggers auto-prune |
+| `CUBE_GC_MIN_AGE_HOURS` | `168` | Min image age before pruning (7 days) |
+
+### Alerting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CUBE_ALERT_WEBHOOK` | *(empty)* | Global webhook URL for alert notifications |
 
 ### GitOps
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CUBE_WEBHOOK_ENABLED` | `false` | Enable git webhook listener |
-| `CUBE_WEBHOOK_SECRET` | *(empty)* | Webhook auth secret (HMAC compared) |
-
----
-
-## Comparison with Alternatives
-
-### Sandbox / Isolation Runtimes
-
-| Feature | **Cube Container** | CubeSandbox (upstream) | E2B | Daytona | fly.io Machines |
-|---------|-------------------|----------------------|-----|---------|----------------|
-| **Isolation model** | runc containers | KVM MicroVM | gVisor Firecracker | Containers / MicroVM | Firecracker |
-| **Min RAM per node** | **4 GB** | 8 GB | 8 GB (managed) | 8 GB | 4 GB (managed) |
-| **Cold start** | **~5 ms** | ~60 ms | ~150 ms (cold) | ~5 s | ~300 ms |
-| **Self-hosted** | ✅ | ✅ | ❌ (SaaS only) | ✅ | ❌ (managed) |
-| **KVM required** | ❌ | ✅ | ✅ | Optional | N/A |
-| **MCP support** | ✅ 50 tools | ❌ | ❌ | ❌ | ❌ |
-| **AI-agent native** | ✅ (MCP, stdio+HTTP) | ❌ | SDK only | ❌ | ❌ |
-| **Dual backend** | ✅ Docker + Cube | ❌ | ❌ | ❌ | ❌ |
-| **Encrypted secrets** | ✅ AES-256-GCM | ❌ | ❌ | ❌ | ❌ |
-| **HA failover** | ✅ Active-passive | ❌ | ❌ | ❌ | ❌ |
-| **Best for** | Edge nodes, self-hosted services, AI agent ops | Untrusted LLM code execution | Managed code sandboxes | Dev environments | Managed global infra |
-
-### Container Orchestration (K8s / Nomad / Docker Swarm)
-
-| Feature | **Cube Container** | Kubernetes | Nomad | Docker Swarm |
-|---------|-------------------|-----------|-------|-------------|
-| **Complexity** | Low (single binary + MCP) | High (etcd, kubelet, CNI, CSI) | Medium | Low |
-| **Min nodes** | 1 | 1 (but heavy) | 1 | 1 |
-| **Min RAM (control plane)** | **~8 MB** | ~1 GB | ~200 MB | ~100 MB |
-| **MCP orchestration** | ✅ (native) | Via 3rd-party tools | ❌ | ❌ |
-| **Auto-pause idle** | ✅ (~15 ms resume) | ❌ | ❌ | ❌ |
-| **Git-driven deploy** | ✅ (`deploy_from_git`) | ArgoCD / Flux (separate) | Templates | ❌ |
-| **Learning curve** | Low | Steep | Medium | Low |
-| **Best for** | Edge, AI-agent ops, small clusters | Enterprise, large-scale | Hybrid workloads | Simple stacks |
-
-Cube Container is **not trying to replace Kubernetes**. It targets a different niche: small clusters (1–10 nodes) on resource-constrained hardware where K8s is overkill, but you still need multi-node scheduling, lifecycle management, and MCP-native AI-agent control.
+| `CUBE_WEBHOOK_SECRET` | *(empty)* | Webhook auth secret |
 
 ---
 
 ## Security Model
 
-### Security Trade-off (important)
+### Security Trade-off
 
 | | CubeSandbox (KVM) | Cube Container (runc) |
 |---|---|---|
 | Isolation strength | Hardware (dedicated kernel) | Namespace (shared kernel) |
 | Container escape risk | Near zero | Low but nonzero |
-| Best for | Untrusted LLM-generated code | **Trusted workloads and services** |
+| Best for | Untrusted code execution | **Trusted workloads and services** |
 
-**Cube Container is designed for hosting your own services** (APIs, static sites, workers, bots) where you control what runs inside the containers. It is **not suitable for running untrusted user-submitted code**.
-
-For untrusted workloads, use upstream [CubeSandbox](https://github.com/TencentCloud/CubeSandbox) with KVM.
+**Cube Container is designed for hosting your own services** — not for running untrusted user-submitted code. For untrusted workloads, use upstream CubeSandbox with KVM.
 
 ### Security Audit
 
-The MCP server underwent a full attack-surface audit. **18 issues were identified and all 18 are resolved:**
+The MCP server underwent two full attack-surface audits. **26 issues identified, all 26 resolved:**
 
 | Severity | Count | Status |
 |----------|-------|--------|
-| 🔴 Critical | 4 | ✅ All fixed |
-| 🟠 High | 5 | ✅ All fixed |
-| 🟡 Medium | 5 | ✅ All fixed |
-| 🟢 Low | 4 | ✅ All fixed |
+| 🔴 Critical | 6 | ✅ All fixed |
+| 🟠 High | 8 | ✅ All fixed |
+| 🟡 Medium | 7 | ✅ All fixed |
+| 🟢 Low | 5 | ✅ All fixed |
 
 Key hardening measures:
 
 | Control | Implementation |
 |---------|----------------|
-| Transport encryption | TLS 1.3 via Caddy or native TLS (`CUBE_TLS_CERT`/`CUBE_TLS_KEY`) |
-| WAF | OWASP Top-10 rules (SQLi, XSS, path traversal, command injection) |
-| Authentication | API key + secret pair, **HMAC constant-time compare** (no timing oracle) |
-| Authorization | RBAC: viewer (read-only), operator (deploy/manage), admin (full) |
-| Rate limiting | 120 req/min per API key (sliding window) |
-| **Exec allowlist** | Commands validated against an **allowlist** (not a bypassable blacklist) |
-| **SSRF prevention** | Git URLs to private IPs / cloud metadata blocked |
-| **Git injection** | Branch names validated, `--` separator prevents option injection |
-| **Config injection** | Domain/path inputs sanitized (prevents Caddy config injection) |
-| **Hosts injection** | DNS target validated as IP (prevents `/etc/hosts` injection) |
-| **Body limit** | 10 MB max request body |
-| **Conn limit** | 64 simultaneous connections per IP |
-| Secrets encryption | AES-256-GCM at rest, nonce prepended, 3 key sources |
-| Audit logging | JSONL append-only with SHA256 tamper-evident hash chain |
-| Secret redaction | Plaintext secrets never written to audit log |
-| HA heartbeat auth | HMAC-SHA256 shared secret, priority-based split-brain resolution |
+| Transport encryption | TLS 1.3 via Caddy or native TLS |
+| Authentication | API key + secret, HMAC constant-time compare |
+| Authorization | RBAC: viewer / operator / admin |
+| Rate limiting | 120 req/min per API key |
+| **Exec allowlist** | Commands validated against allowlist (not bypassable blacklist) |
+| **SSRF prevention** | Git URLs, node addresses, webhook URLs, health probes — all block private IPs and cloud metadata |
+| **Argument injection prevention** | Container IDs validated before passing to Docker CLI |
+| **Path traversal prevention** | Mount paths validated against sensitive system directories |
+| **Git injection** | Branch names validated, `--` separator |
+| **Config injection** | Domain/path inputs sanitized |
+| Body limit | 10 MB max request body |
+| Conn limit | 64 simultaneous connections per IP |
+| Secrets encryption | AES-256-GCM at rest |
+| Audit logging | JSONL SHA256 hash chain |
+| HA heartbeat auth | HMAC-SHA256, priority-based split-brain |
+| **Volume prune safety** | Auto-prune never deletes volumes (manual only) |
+| **SSH host key checking** | known_hosts file prevents MITM after first connection |
 
 ---
 
 ## Performance
 
-Real measurements from test environment (AMD Ryzen 5 3400G, Go 1.24, Linux):
-
 | Metric | Value | Notes |
 |--------|-------|-------|
-| **Binary size** | 6.95 MB | Static binary, stripped (`-ldflags -s -w`) |
+| **Binary size** | ~8 MB | Static binary, stripped |
 | **RSS memory (idle)** | 8.3 MB | HTTP mode, after startup |
-| **Startup + init** | < 1 ms | Process spawn → MCP initialize response |
-| **HTTP latency (avg)** | 482 µs | Full stack: auth → RBAC → rate limit → MCP → backend |
-| **HTTP latency (p99)** | 589 µs | 100 requests, same stack |
-| **Throughput** | 2,076 RPS | Requests per second, single core |
+| **Startup + init** | < 1 ms | Process spawn → MCP initialize |
+| **HTTP latency (avg)** | 482 µs | Full stack: auth → RBAC → backend |
+| **Throughput** | 2,076 RPS | Single core |
 
-Component-level benchmarks (Go `testing.B`):
-
-| Operation | Latency | Notes |
-|-----------|---------|-------|
-| Auth key validation | **110 ns** | HMAC compare, map lookup, timing-safe |
-| RBAC permission check | **12 ns** | Map lookup + int compare |
-| Rate limiter check | 244 µs | Sliding window |
-| Audit log write | 5.2 µs | JSONL + SHA256 hash chain |
-| Secrets encrypt (AES-256-GCM) | ~3 µs | Per secret |
-
-All measurements taken with Go 1.24 on Linux/amd64. Reproducible via:
 ```bash
 cd mcp-server-go
 go test -tags=e2e -bench=. -benchmem ./...
@@ -526,30 +553,35 @@ go test -tags=e2e -bench=. -benchmem ./...
 cube-container/
 ├── CubeAPI/                   # Rust — E2B-compatible REST API (:3000)
 ├── CubeMaster/                # Go — multi-node scheduler
-├── Cubelet/                   # Go — per-node lifecycle (modified for overlayfs)
-├── cube-lifecycle-manager/    # Auto-pause/resume controller
-├── CubeProxy/                 # nginx reverse proxy + TLS
-├── web/                       # React web console (:12088)
-├── mcp-server-go/             # Go — MCP server (50 tools, auth, single static binary)
-│   ├── server.go              # MCP server — dual stdio + HTTP mode, 50 tool handlers
+├── Cubelet/                   # Go — per-node lifecycle
+├── mcp-server-go/             # Go — MCP server (89 tools, single binary)
+│   ├── server.go              # MCP server — stdio + HTTP, 89 tool handlers
 │   ├── client.go              # CubeAPI HTTP client (Cube backend)
 │   ├── docker_client.go       # Docker Engine API client (Docker backend)
 │   ├── backend.go             # ContainerBackend interface + auto-detection
 │   ├── deploy.go              # Persistent deploy from git/code
-│   ├── security.go            # Input validation (allowlist exec, SSRF, git URL, branch)
-│   ├── auth.go                # API-key auth, RBAC, rate limiting, audit, conn limits
-│   ├── secrets.go             # AES-256-GCM encrypted secrets management
+│   ├── security.go            # Input validation (10+ validators)
+│   ├── auth.go                # Auth, RBAC, rate limiting, audit, conn limits
+│   ├── secrets.go             # AES-256-GCM encrypted secrets
 │   ├── ha.go                  # Active-passive HA with HMAC heartbeats
-│   ├── backup.go              # Backup & restore with SHA256 integrity
+│   ├── backup.go              # Backup & restore with SHA256
 │   ├── rollback.go            # Deployment version history & rollback
 │   ├── routing.go             # Caddy route management + auto TLS
-│   ├── networking.go          # Port mappings, DNS aliases, network policies
-│   ├── webhook.go             # GitOps webhook listener (opt-in)
-│   ├── metrics.go             # Prometheus /metrics endpoint
-│   ├── scheduler.go           # 4D bin-packing node suggestions
+│   ├── networking.go          # Port mappings, DNS aliases, policies
+│   ├── health.go              # Health probes + auto-restart watcher
+│   ├── nodes.go               # Multi-node registry + remote deploy
+│   ├── scaling.go             # Horizontal scaling + load balancing
+│   ├── volumes.go             # Volume attach/detach/migrate
+│   ├── discovery.go           # Service discovery registry
+│   ├── resources.go           # Resource limits + usage monitoring
+│   ├── gc.go                  # Image/volume garbage collection
+│   ├── alerting.go            # Alert rules + webhook notifications
+│   ├── configmaps.go          # Non-sensitive config management
+│   ├── webhook.go             # GitOps webhook listener
+│   ├── metrics.go             # Prometheus /metrics
+│   ├── scheduler.go           # 4D bin-packing
 │   ├── logstream.go           # SSE log streaming
-│   ├── *_test.go              # 43 tests (security, auth, backup, concurrency, e2e, bench)
-│   └── go.mod
+│   └── *_test.go              # 43 tests (security, auth, concurrency, e2e)
 ├── deploy/
 │   └── container-mode/        # Dockerfile, Caddyfile, config
 └── sdk/                       # Python + Go SDKs
@@ -557,44 +589,32 @@ cube-container/
 
 ---
 
-## Development
+## CI
 
-### Run the MCP server locally (stdio mode)
+7 jobs on GitHub Actions:
 
-```bash
-cd mcp-server-go
-go build -o cube-mcp .
-./cube-mcp
-```
-
-### Run tests (with race detector)
-
-```bash
-cd mcp-server-go && go test -race -timeout 60s ./...
-```
-
-### CI
-
-6 jobs on GitHub Actions:
-- Go tests (1.24 + 1.25) with race detector
-- Cubelet build (Go)
-- CubeMaster build (Go)
-- Docker image build
-- Security scan (Gosec)
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+| Job | Purpose |
+|-----|---------|
+| MCP Server (Go 1.24 + 1.25) | Build, vet, tests with race detector |
+| Go Components | Cubelet + CubeMaster builds |
+| Docker Image Build | Full multi-stage Dockerfile |
+| Security Scan | Gosec SAST + Govulncheck |
+| Binary Guard | Detects committed ELF/PE binaries |
 
 ---
 
 ## Roadmap
 
-- [x] ~~Multi-node auto-discovery~~ → manual node registration
-- [x] ~~WebSocket-based log streaming~~ → SSE `/streams/{id}/logs`
-- [x] ~~Container resource metrics~~ → Prometheus `/metrics`
-- [x] ~~Preemptive scheduling~~ → `suggest_node` 4D bin-packing
-- [x] ~~Snapshot/rollback~~ → `rollback_deploy` + version history
-- [x] ~~Webhook notifications~~ → GitOps webhook listener
-- [ ] Scale: replicas + load balancer
+- [x] ~~Multi-node scheduling~~ → `suggest_node` 4D bin-packing + `deploy_to_node`
+- [x] ~~Health checks~~ → HTTP/TCP/exec probes with auto-restart
+- [x] ~~Horizontal scaling~~ → `scale_set` with Caddy load balancing
+- [x] ~~Volume lifecycle~~ → attach/detach/migrate
+- [x] ~~Service discovery~~ → name → endpoint registry
+- [x] ~~Resource limits~~ → docker update + usage monitoring
+- [x] ~~Garbage collection~~ → auto image prune, disk monitoring
+- [x] ~~Alerting~~ → rule-based monitoring with webhooks
+- [x] ~~ConfigMaps~~ → non-sensitive config management
+- [x] ~~Security hardening~~ → 26/26 attack surfaces closed
 - [ ] Billing / metering
 - [ ] OIDC / OAuth2 authentication
 - [ ] Multi-region federation
@@ -609,5 +629,5 @@ Apache 2.0 (inherited from upstream [CubeSandbox](https://github.com/TencentClou
 
 ## Credits
 
-- **[TencentCloud/CubeSandbox](https://github.com/TencentCloud/CubeSandbox)** — original project, 8.7K+ stars. This fork would not exist without their work.
+- **[TencentCloud/CubeSandbox](https://github.com/TencentCloud/CubeSandbox)** — original project, 8.7K+ stars.
 - Built on [containerd](https://containerd.io/), [runc](https://github.com/opencontainers/runc), [Caddy](https://caddyserver.com/), [Docker Engine API](https://docs.docker.com/engine/api/), and the [MCP protocol](https://modelcontextprotocol.io/).
