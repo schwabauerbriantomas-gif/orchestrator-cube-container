@@ -68,7 +68,10 @@ func newDockerClientWithTransport(address, transport string) *DockerClient {
 		HTTP: &http.Client{
 			Timeout: 60 * time.Second,
 			Transport: &http.Transport{
-				DialContext: dialContext,
+				DialContext:         dialContext,
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 100,
+				IdleConnTimeout:     90 * time.Second,
 			},
 		},
 	}

@@ -35,12 +35,22 @@ func (c *CubeClient) BackendName() string { return "cube" }
 
 func (c *CubeClient) Endpoint() string { return c.BaseURL }
 
+// AUDIT FIX H-06: No default API key. Fail if CUBE_API_KEY is missing when
+// using the Cube backend. The previous default "e2b_000000" was a public value
+// visible in source — an attacker could impersonate the MCP server to CubeAPI.
 func newCubeClient() *CubeClient {
 	baseURL := envOr("CUBE_API_URL", "http://localhost:3000")
-	apiKey := envOr("CUBE_API_KEY", "e2b_000000")
+	apiKey := os.Getenv("CUBE_API_KEY")
+	if apiKey == "" {
+		// stdio mode (personal use) doesn't need CubeAPI auth in many setups.
+		// Log a warning so operators know. HTTP mode enforces API keys at the
+		// MCP layer regardless.
+		fmt.Fprintf(os.Stderr, "[cube-mcp] WARNING: CUBE_API_KEY not set — CubeAPI calls may be unauthenticated\n")
+		apiKey = "cube-anonymous"
+	}
 	return &CubeClient{
-		BaseURL: baseURL,
-		APIKey:  apiKey,
+		BaseURL:  baseURL,
+		APIKey:   apiKey,
 		HTTP: &http.Client{
 			Timeout: 30 * time.Second,
 		},

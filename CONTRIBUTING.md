@@ -26,19 +26,24 @@ go test -race -v ./...
 
 ```
 MCP Server (Go, single binary)
-├── server.go      — 34 MCP tools, dual-mode (stdio + HTTP)
-├── client.go      — CubeAPI HTTP client (default backend)
-├── docker_client.go — Docker Engine backend (optional, build tag: docker)
-├── auth.go        — API keys, RBAC, rate limiting, audit trail
-├── deploy.go      — GitOps deploy, volume management
-├── backup.go      — Backup/restore with SHA256 integrity
-├── scheduler.go   — Bin-packing node scheduling assistant
-├── routing.go     — Caddy TLS automation
-├── logstream.go   — SSE log streaming
-├── metrics.go     — Prometheus endpoint
-├── rollback.go    — Deploy versioning
-├── webhook.go     — GitOps push webhooks
-└── security.go    — Input validation
+├── server.go          — tool registration + core handlers (129 tools)
+├── handlers_phase2.go — Phase 2+ tool handlers (deploy, scaling, etc.)
+├── handlers_secure.go — Secure sandbox tool handlers
+├── client.go          — CubeAPI HTTP client (Cube backend)
+├── docker_client.go   — Docker Engine backend (auto-detected, no build tag needed)
+├── auth.go            — API keys (hashed at rest), RBAC, rate limiting, audit hash chain
+├── secrets.go         — AES-256-GCM encrypted secrets (argon2id key derivation)
+├── security.go        — Input validation (command allowlist, SSRF, path traversal)
+├── deploy.go          — GitOps deploy, volume management
+├── backup.go          — Backup/restore with SHA256 integrity
+├── scheduler.go       — Bin-packing node scheduling assistant
+├── routing.go         — Caddy TLS automation
+├── logstream.go       — SSE log streaming
+├── metrics.go         — Prometheus endpoint
+├── rollback.go        — Deploy versioning
+├── webhook.go         — GitOps push webhooks (URL validated pre-deploy)
+├── secure_sandbox.go  — KVM sandbox for untrusted code
+└── ha.go              — Active-passive high availability
 ```
 
 ## Adding a New MCP Tool

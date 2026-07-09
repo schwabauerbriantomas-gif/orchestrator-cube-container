@@ -223,14 +223,18 @@ func canExecute(role Role, toolName string) bool {
 // ---- API Key store ----
 
 // APIKey represents a stored credential.
+// AUDIT FIX H-02: SecretHash stores a SHA-256 hash of the secret. The plaintext
+// secret is NEVER persisted to disk — it is only returned once in GenerateKey.
+// The Secret field is used only in-memory for the initial response, then cleared.
 type APIKey struct {
-	Key       string    `json:"key"`
-	Secret    string    `json:"secret"`
-	Role      Role      `json:"role"`
-	Label     string    `json:"label"`
-	CreatedAt time.Time `json:"created_at"`
-	LastUsed  time.Time `json:"last_used"`
-	Disabled  bool      `json:"disabled"`
+	Key        string    `json:"key"`
+	Secret     string    `json:"-"`              // in-memory only, never serialized
+	SecretHash string    `json:"secret_hash"`    // SHA-256 hash persisted to disk
+	Role       Role      `json:"role"`
+	Label      string    `json:"label"`
+	CreatedAt  time.Time `json:"created_at"`
+	LastUsed   time.Time `json:"last_used"`
+	Disabled   bool      `json:"disabled"`
 }
 
 // KeyStore manages API keys with file persistence.
@@ -282,29 +286,44 @@ func (ks *KeyStore) saveLocked() {
 	os.WriteFile(ks.filePath, data, 0600)
 }
 
+// hashSecret computes a SHA-256 hash of an API key secret for at-rest storage.
+// AUDIT FIX H-02: We store only the hash on disk, never the plaintext secret.
+func hashSecret(secret string) string {
+	h := sha256.Sum256([]byte(secret))
+	return hex.EncodeToString(h[:])
+}
+
 // GenerateKey creates a new API key + secret pair.
+// AUDIT FIX M-09: Hold lock through save to prevent concurrent writers from
+// modifying ks.keys between Unlock and save(). Previously the Unlock-then-save
+// pattern allowed a race where two GenerateKey calls could lose one key on
+// persist.
+// AUDIT FIX H-02: SecretHash is persisted, plaintext Secret is in-memory only.
 func (ks *KeyStore) GenerateKey(role Role, label string) (*APIKey, error) {
 	key := "cc_live_" + randomHex(16)
 	secret := "sec_" + randomHex(24)
 
 	apiKey := &APIKey{
-		Key:       key,
-		Secret:    secret,
-		Role:      role,
-		Label:     label,
-		CreatedAt: time.Now(),
+		Key:        key,
+		Secret:     secret,
+		SecretHash: hashSecret(secret),
+		Role:       role,
+		Label:      label,
+		CreatedAt:  time.Now(),
 	}
 
 	ks.mu.Lock()
 	ks.keys[key] = apiKey
+	ks.saveLocked()
 	ks.mu.Unlock()
-	ks.save()
 
 	return apiKey, nil
 }
 
 // Validate checks an API key + secret pair and returns the key if valid.
 // Uses constant-time comparisons throughout to prevent timing attacks (B1).
+// AUDIT FIX H-02: Compares hash(provided_secret) with stored SecretHash instead
+// of comparing plaintext secrets. The plaintext is never on disk.
 func (ks *KeyStore) Validate(key, secret string) (*APIKey, error) {
 	ks.mu.RLock()
 	k, exists := ks.keys[key]
@@ -316,7 +335,9 @@ func (ks *KeyStore) Validate(key, secret string) (*APIKey, error) {
 		hmac.Equal([]byte(secret), []byte("dummy-secret-to-prevent-timing-leak"))
 		return nil, fmt.Errorf("invalid API key")
 	}
-	if !hmac.Equal([]byte(k.Secret), []byte(secret)) {
+	// Compare hash(provided) with stored hash using constant-time comparison
+	providedHash := hashSecret(secret)
+	if !hmac.Equal([]byte(k.SecretHash), []byte(providedHash)) {
 		return nil, fmt.Errorf("invalid secret")
 	}
 
@@ -341,7 +362,8 @@ func (ks *KeyStore) Revoke(key string) error {
 	return nil
 }
 
-// List returns all keys (secrets redacted in output).
+// List returns all keys (secrets and hashes redacted in output).
+// AUDIT FIX H-02: Also redact SecretHash — it should never appear in API responses.
 func (ks *KeyStore) List() []*APIKey {
 	ks.mu.RLock()
 	defer ks.mu.RUnlock()
@@ -349,6 +371,7 @@ func (ks *KeyStore) List() []*APIKey {
 	for _, k := range ks.keys {
 		redacted := *k
 		redacted.Secret = "[redacted]"
+		redacted.SecretHash = "[redacted]"
 		result = append(result, &redacted)
 	}
 	return result
@@ -357,10 +380,11 @@ func (ks *KeyStore) List() []*APIKey {
 // ---- Rate limiter (sliding window) ----
 
 type rateLimiter struct {
-	mu       sync.Mutex
-	requests map[string][]time.Time
-	limit    int
-	window   time.Duration
+	mu          sync.Mutex
+	requests    map[string][]time.Time
+	limit       int
+	window      time.Duration
+	lastCleanup time.Time // AUDIT FIX M-03: tracks last cleanup sweep
 }
 
 func newRateLimiter(limit int, window time.Duration) *rateLimiter {
@@ -378,6 +402,12 @@ func (rl *rateLimiter) Allow(key string) bool {
 	now := time.Now()
 	cutoff := now.Add(-rl.window)
 
+	// AUDIT FIX M-03: Periodic cleanup of stale entries to prevent memory leak.
+	// Every ~1000 calls (or if map is large), sweep entries with no recent activity.
+	if rl.cleanupDue(now) {
+		rl.cleanupLocked(cutoff)
+	}
+
 	// Filter to requests within the window
 	var recent []time.Time
 	for _, t := range rl.requests[key] {
@@ -394,6 +424,36 @@ func (rl *rateLimiter) Allow(key string) bool {
 	recent = append(recent, now)
 	rl.requests[key] = recent
 	return true
+}
+
+// AUDIT FIX M-03: cleanup state for periodic eviction of stale rate-limiter keys.
+var rateLimiterCleanupInterval = 5 * time.Minute
+
+func (rl *rateLimiter) cleanupDue(now time.Time) bool {
+	if rl.lastCleanup.IsZero() {
+		rl.lastCleanup = now
+		return false
+	}
+	return now.Sub(rl.lastCleanup) >= rateLimiterCleanupInterval
+}
+
+// cleanupLocked removes keys whose request slices are fully outside the window.
+// Caller must hold rl.mu.
+func (rl *rateLimiter) cleanupLocked(cutoff time.Time) {
+	for key, timestamps := range rl.requests {
+		var recent []time.Time
+		for _, t := range timestamps {
+			if t.After(cutoff) {
+				recent = append(recent, t)
+			}
+		}
+		if len(recent) == 0 {
+			delete(rl.requests, key)
+		} else {
+			rl.requests[key] = recent
+		}
+	}
+	rl.lastCleanup = time.Now()
 }
 
 // ---- Audit logger (JSONL with tamper-evident hashing) ----
@@ -448,11 +508,15 @@ func (al *AuditLogger) Log(entry AuditEntry) {
 }
 
 // computeAuditHash creates a SHA256 chain: hash(prev_hash + entry fields).
+// AUDIT FIX M-01: Added Tool and Reason to the hash payload so that tampering
+// with either field is detectable by VerifyAuditChain. Previously an attacker
+// could change "delete_volume" → "list_volumes" without breaking the chain.
 func computeAuditHash(entry AuditEntry) string {
-	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%d|%s|%v|%s",
+	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%d|%s|%v|%s|%s|%s",
 		entry.Timestamp, entry.Key, entry.Role,
 		entry.Method, entry.Path, entry.StatusCode,
 		entry.Duration, entry.Allowed, entry.PrevHash,
+		entry.Tool, entry.Reason,
 	)
 	h := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(h[:])
@@ -492,16 +556,18 @@ func VerifyAuditChain(path string) (int, error) {
 
 // AuthMiddleware wraps an http.Handler with API key auth, RBAC, rate limiting, audit.
 type AuthMiddleware struct {
-	keys    *KeyStore
-	limiter *rateLimiter
-	audit   *AuditLogger
+	keys       *KeyStore
+	limiter    *rateLimiter
+	ipLimiter  *rateLimiter // AUDIT FIX M-08: per-IP rate limit prevents multi-key bypass
+	audit      *AuditLogger
 }
 
 func newAuthMiddleware(keys *KeyStore, limiter *rateLimiter, audit *AuditLogger) *AuthMiddleware {
 	return &AuthMiddleware{
-		keys:    keys,
-		limiter: limiter,
-		audit:   audit,
+		keys:      keys,
+		limiter:   limiter,
+		ipLimiter: newRateLimiter(600, time.Minute), // AUDIT FIX M-08: 600 req/min per IP (10x per-key)
+		audit:     audit,
 	}
 }
 
@@ -551,7 +617,18 @@ func (am *AuthMiddleware) Wrap(next http.Handler, toolExtractor func(*http.Reque
 			return
 		}
 
-		// Rate limit
+		// Rate limit per IP (AUDIT FIX M-08: prevents multi-key bypass)
+		clientIP := ipFromAddr(r.RemoteAddr)
+		if !am.ipLimiter.Allow(clientIP) {
+			statusCode = 429
+			allowed = false
+			reason = "rate limit exceeded (per-IP)"
+			writeJSONError(w, statusCode, reason)
+			am.logAudit(start, key, "", r, statusCode, allowed, reason, "")
+			return
+		}
+
+		// Rate limit per key
 		if !am.limiter.Allow(key) {
 			statusCode = 429
 			allowed = false

@@ -2,6 +2,15 @@
 // Copyright (C) 2026 Tencent. All rights reserved.
 
 // Minimal fetch wrapper. Auth header can be injected via the api-key header.
+//
+// SECURITY: This wrapper reads API keys and session tokens from localStorage
+// (see lines referencing `cube.apiKey` and `cube.session` below). localStorage
+// is readable by any JavaScript running in the page origin, so an XSS payload
+// could exfiltrate credentials. See web/src/lib/session.ts for the full
+// write-up and the HttpOnly-cookie migration path.
+// TODO(M-05): Migrate credentials to HttpOnly + Secure + SameSite cookies set
+// by the backend, so client-side JS can no longer read them. Requires backend
+// /auth changes; out of scope for the comment-only audit pass.
 
 export type ApiInit = RequestInit & { params?: Record<string, string | number | boolean | undefined> };
 

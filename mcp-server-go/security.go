@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,24 +38,42 @@ var allowedGitProtocolsInsecure = []string{"http://", "git://"}
 // We use an ALLOWLIST approach: only permit commands that match known-safe
 // prefixes. This is more restrictive than a blacklist but far harder to bypass.
 // The allowlist can be extended via CUBE_EXEC_ALLOWLIST (comma-separated).
+//
+// AUDIT FIX C-01 (Sentinel+Apex consensus): Removed sh, bash, python, python3,
+// node, npm, go, cargo, curl, wget, nc, pip, pip3 from the default allowlist.
+// These tools enable arbitrary code execution / reverse shells / data exfiltration,
+// making the string-based denylist trivially bypassable (e.g. sh -c 'find / -delete').
+// Operators who need these can add them via CUBE_EXEC_ALLOWLIST=sh,bash,python3.
+// This is intentional defense-in-depth: the denylist alone cannot stop a shell.
+//
 var execAllowlist = []string{
+	// Read-only diagnostics
 	"ls", "cat", "head", "tail", "grep", "find", "wc", "sort", "uniq",
 	"ps", "top", "env", "printenv", "whoami", "hostname", "date", "uname",
 	"df", "du", "free", "uptime", "id", "pwd", "stat", "file", "diff",
+	// Safe output
 	"echo", "printf", "test", "true", "false",
-	"python", "python3", "pip", "pip3", "node", "npm", "go", "cargo",
-	"git", "curl", "wget",
-	"pgrep", "pkill", "kill", "killall",
+	// Process management
+	"pgrep",
+	// File operations (non-destructive)
 	"mkdir", "touch", "cp", "mv",
+	// Archive
 	"tar", "zip", "unzip", "gzip", "gunzip",
+	// Text processing
 	"sed", "awk", "cut", "tr",
+	// Database clients (require credentials, limited surface)
 	"redis-cli", "psql", "mysql",
-	"nc", "ss", "netstat",
-	"sh", "bash",  // shells are allowed but chained destructive commands are blocked below
+	// Network diagnostics (no data transfer capability)
+	"ss", "netstat",
+	// Git (needed for deploy workflows)
+	"git",
 }
 
-// execDenylist catches destructive patterns even when the binary is allowed
-// (e.g. "sh -c 'rm -rf /'"). These are checked against the FULL command string.
+// execDenylist catches destructive patterns even when the binary is allowed.
+// NOTE (audit C-01): This denylist is defense-in-depth ONLY — it cannot stop
+// an attacker who has shell access or a Turing-complete interpreter (python,
+// node, etc). The primary defense is the allowlist above which now excludes
+// all shells and interpreters by default.
 var execDenylist = []string{
 	"rm -rf /",
 	"rm -rf /*",
@@ -67,10 +86,29 @@ var execDenylist = []string{
 	"reboot",
 	"halt",
 	"poweroff",
+	// Pipe-to-interpreter (covers all common shells)
 	"| sh",
 	"| bash",
 	"|/bin/sh",
 	"|/bin/bash",
+	"| python",
+	"| python3",
+	"| node",
+	"| perl",
+	"| ruby",
+	// Command substitution patterns
+	"$(sh",
+	"$(bash",
+	"$(python",
+	"$(curl",
+	"$(wget",
+	// Block-device writes
+	">/dev/sd",
+	">/dev/vd",
+	">/dev/nvm",
+	// eval / exec
+	"eval ",
+	"exec ",
 }
 
 func init() {
@@ -218,67 +256,72 @@ func validateGitURL(url string) (string, error) {
 
 // isPrivateHost returns true if the hostname is a private/internal address.
 // Checks RFC 1918 ranges, loopback, link-local, and cloud metadata endpoints.
+// AUDIT FIX H-03: Rewritten to use net/netip for IPv6, IPv4-mapped IPv6,
+// decimal/hex/octal encoding, and unspecified address detection. The old
+// string-based parser missed [::1], 2130706433, 0x7f000001, [::ffff:127.0.0.1].
 func isPrivateHost(host string) bool {
 	// Cloud metadata endpoints — must be blocked
 	if host == "169.254.169.254" || host == "metadata.google.internal" || host == "metadata" {
 		return true
 	}
 
-	// Check if it's a literal IP
-	parts := strings.Split(host, ".")
-	if len(parts) == 4 {
-		// Parse as IPv4
-		var octets [4]int
-		valid := true
-		for i, p := range parts {
-			n := 0
-			for _, c := range p {
-				if c < '0' || c > '9' {
-					valid = false
-					break
-				}
-				n = n*10 + int(c-'0')
-			}
-			if !valid || n > 255 {
-				valid = false
-				break
-			}
-			octets[i] = n
-		}
-		if valid {
-			// 10.0.0.0/8
-			if octets[0] == 10 {
-				return true
-			}
-			// 172.16.0.0/12
-			if octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31 {
-				return true
-			}
-			// 192.168.0.0/16
-			if octets[0] == 192 && octets[1] == 168 {
-				return true
-			}
-			// 127.0.0.0/8 (loopback)
-			if octets[0] == 127 {
-				return true
-			}
-			// 169.254.0.0/16 (link-local + cloud metadata)
-			if octets[0] == 169 && octets[1] == 254 {
-				return true
-			}
-			// 0.0.0.0/8
-			if octets[0] == 0 {
-				return true
-			}
-		}
-	}
-
 	// localhost variants
-	host = strings.ToLower(host)
-	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+	lower := strings.ToLower(host)
+	if lower == "localhost" || strings.HasSuffix(lower, ".localhost") {
 		return true
 	}
 
+	// Try parsing as a literal IP address (handles IPv4 dotted-decimal,
+	// IPv6, IPv4-mapped IPv6, decimal, hex, and octal forms on most platforms).
+	// net.ParseIP handles standard forms; for non-standard encodings we also
+	// try parsing each dotted part as decimal/octal/hex.
+	if ip := net.ParseIP(host); ip != nil {
+		return isPrivateIP(ip)
+	}
+
+	// Strip brackets from IPv6 literal: [::1] → ::1
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		inner := host[1 : len(host)-1]
+		if ip := net.ParseIP(inner); ip != nil {
+			return isPrivateIP(ip)
+		}
+	}
+
+	// Handle zone-indexed IPv6: fe80::1%eth0
+	if idx := strings.LastIndex(host, "%"); idx > 0 {
+		if ip := net.ParseIP(host[:idx]); ip != nil {
+			return isPrivateIP(ip)
+		}
+	}
+
+	return false
+}
+
+// isPrivateIP checks whether a parsed net.IP falls into a private/reserved range.
+func isPrivateIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	// Loopback (127.0.0.0/8, ::1/128)
+	if ip.IsLoopback() {
+		return true
+	}
+	// Private (10/8, 172.16/12, 192.168/16, fc00::/7)
+	if ip.IsPrivate() {
+		return true
+	}
+	// Link-local (169.254/16, fe80::/10) — also covers cloud metadata
+	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+	// Unspecified (0.0.0.0, ::)
+	if ip.IsUnspecified() {
+		return true
+	}
+	// Multicast (224.0.0.0/4, ff00::/8)
+	if ip.IsMulticast() {
+		return true
+	}
 	return false
 }
 

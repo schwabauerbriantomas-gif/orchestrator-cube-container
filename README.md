@@ -8,7 +8,7 @@
 
 A container orchestration platform controlled by AI through the Model Context Protocol. An MCP server that replaces the DevOps role — the operations interface is natural language, not YAML.
 
-121 tools covering the complete DevOps lifecycle: containers, images, deployments, scaling, health monitoring, networking, routing, secrets, backups, high availability, multi-node clusters, environments, notifications, scheduled jobs, database provisioning, certificates, and event streaming.
+129 tools covering the complete DevOps lifecycle: containers, images, deployments, scaling, health monitoring, networking, routing, secrets, backups, high availability, multi-node clusters, environments, notifications, scheduled jobs, database provisioning, certificates, and event streaming.
 
 ## Architecture
 
@@ -56,7 +56,9 @@ docker build -t cube-container .
 docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-container
 ```
 
-## Tool Reference (121 tools)
+## Tool Reference (129 tools)
+
+<!-- Tool count is verified by CI: `grep -c 's.AddTool' mcp-server-go/server.go` must equal 129. -->
 
 ### Cluster & Nodes (7)
 
@@ -415,7 +417,7 @@ Binary size: ~8.5MB (statically linked, no CGO).
 
 ```
 mcp-server-go/
-├── server.go            — 121 tool registrations, dual mode, HTTP middleware
+├── server.go            — 129 tool registrations, dual mode, HTTP middleware
 ├── handlers_phase2.go   — 32 handlers (images, deploy, logs, envs, jobs, DBs, certs, events)
 ├── backend.go           — ContainerBackend interface + auto-detection
 ├── docker_client.go     — Docker Engine API backend

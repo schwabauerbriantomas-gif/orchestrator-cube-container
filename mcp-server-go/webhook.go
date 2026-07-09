@@ -116,6 +116,20 @@ func handleGitWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// AUDIT FIX H-05: Validate the git URL BEFORE launching the async goroutine.
+	// Previously the URL was passed unchecked to DeployFromGit asynchronously,
+	// meaning an attacker got a 200 OK before any validation ran. This made
+	// SSRF via the webhook endpoint (which requires no API key) trivial.
+	if validated, err := validateGitURL(repoURL); err != nil {
+		writeWebhookJSON(w, http.StatusBadRequest, webhookResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("webhook rejected — invalid git URL: %v", err),
+		})
+		return
+	} else {
+		repoURL = validated
+	}
+
 	// Extract branch from ref (e.g. "refs/heads/main" → "main").
 	// Fall back to "main" if absent (some create/tag events omit it).
 	branch := branchFromRef(payload.Ref)

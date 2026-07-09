@@ -76,12 +76,16 @@ jobs:
 
       - name: Vet (non-blocking, upstream code has pre-existing warnings)
         working-directory: ${{ matrix.component }}
-        continue-on-error: true
+        # AUDIT FIX H-08: Changed from continue-on-error + total suppression
+        # (2>/dev/null || true) to actually running vet and reporting warnings.
+        # We still allow warnings for upstream Tencent code but no longer hide them.
         run: |
-          # Only vet packages we own/modified — upstream Tencent code has
-          # pre-existing vet warnings (CGO headers, lock copies, format strings)
-          # that are not our concern in this fork.
-          go vet ./cmd/... ./pkg/cubecow/... 2>/dev/null || true
+          # Vet packages we own/modified — upstream Tencent code has pre-existing
+          # vet warnings that we track as known issues but don't suppress.
+          go vet ./cmd/... ./pkg/cubecow/... 2>&1 | head -50 || {
+            echo "::warning::go vet found issues in upstream code (non-blocking for forked components)"
+            exit 0
+          }
 
   docker-build:
     name: Docker Image Build
@@ -108,14 +112,14 @@ jobs:
         uses: securego/gosec@master
         with:
           args: -fmt sarif -out gosec-results.sarif -exclude-dir=Cubelet -exclude-dir=CubeMaster ./mcp-server-go/...
-        continue-on-error: true
+        # AUDIT FIX H-07: Removed continue-on-error — SAST findings now gate merges
 
       - name: Govulncheck (MCP server only)
         uses: golang/govulncheck-action@v1
         with:
-          go-version-input: "1.24"
+          go-version-input: "1.25"
           work-dir: mcp-server-go
-        continue-on-error: true
+        # AUDIT FIX H-07: Removed continue-on-error — known CVEs now gate merges
 
       - name: Upload SARIF
         if: always() && hashFiles('gosec-results.sarif') != ''
@@ -132,18 +136,20 @@ jobs:
       - name: Detect committed binaries
         run: |
           # Check for ELF/PE/Mach-O files in tracked source directories
+          # AUDIT FIX C-02: Expanded scan to include Cubelet/ root (not just Cubelet/cmd/)
+          # and CubeMaster/ root — the 93MB cubelet binary lived in Cubelet/ undetected.
           FOUND=0
-          for dir in mcp-server-go Cubelet/cmd CubeMaster/cmd cubelog; do
+          for dir in mcp-server-go Cubelet CubeMaster cubelog deploy; do
             if [ -d "$dir" ]; then
               while IFS= read -r -d '' f; do
                 TYPE=$(file -b "$f")
                 case "$TYPE" in
-                  *"ELF"*|*"executable"*|*"Mach-O"*|*"PE32"*)
+                  *ELF*|*executable*|*Mach-O*|*PE32*)
                     echo "::error file=$f::Binary executable detected: $f"
                     FOUND=1
                     ;;
                 esac
-              done < <(find "$dir" -type f ! -name "*.go" ! -name "*.sum" ! -name "*.mod" ! -name "*.md" -print0)
+              done < <(find "$dir" -type f ! -name "*.go" ! -name "*.sum" ! -name "*.mod" ! -name "*.md" ! -path "*/assets/bin/*" -print0)
             fi
           done
           if [ "$FOUND" = "1" ]; then

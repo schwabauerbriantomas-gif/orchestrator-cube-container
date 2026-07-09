@@ -520,10 +520,11 @@ func (vm *VolumeManager) VolumeMigrate(volumeName, fromNode, toNode string) (map
 	}
 
 	// Step 2: ensure the remote volume root exists, then scp the tarball.
-	// B5: use StrictHostKeyChecking=no with a known_hosts file rather than
-	// accept-new, so that once a host key is learned, MITM is detected.
+	// AUDIT FIX H-04: Changed from StrictHostKeyChecking=no to accept-new.
+	// =no accepts ANY host key on first connection (MITM). accept-new only
+	// accepts a key once, then pins it — subsequent MITM attempts are detected.
 	mkdirCmd := exec.Command("ssh",
-		"-o", "StrictHostKeyChecking=no",
+		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "UserKnownHostsFile=/root/.ssh/known_hosts",
 		"-o", "ConnectTimeout=10",
 		targetHost,
@@ -536,7 +537,7 @@ func (vm *VolumeManager) VolumeMigrate(volumeName, fromNode, toNode string) (map
 	// Step 3: copy the tarball to the remote root.
 	remoteTar := filepath.Join(remoteVolRoot, ".__migrate_"+volumeName+".tar")
 	scpCmd := exec.Command("scp",
-		"-o", "StrictHostKeyChecking=no",
+		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "UserKnownHostsFile=/root/.ssh/known_hosts",
 		"-o", "ConnectTimeout=10",
 		tmpTarPath, targetHost+":"+remoteTar,
@@ -547,7 +548,7 @@ func (vm *VolumeManager) VolumeMigrate(volumeName, fromNode, toNode string) (map
 
 	// Step 4: extract on the remote node and clean up the tarball.
 	extractCmd := exec.Command("ssh",
-		"-o", "StrictHostKeyChecking=no",
+		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "UserKnownHostsFile=/root/.ssh/known_hosts",
 		"-o", "ConnectTimeout=10",
 		targetHost,

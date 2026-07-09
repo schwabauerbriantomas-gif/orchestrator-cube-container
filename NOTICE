@@ -1,0 +1,44 @@
+Cube Container
+Copyright (C) 2026 Brian Tomas Schwabauer
+
+This product is a fork of Tencent CubeSandbox (https://github.com/TencentCloud/CubeSandbox),
+licensed under the Apache License, Version 2.0.
+
+=== Original Project ===
+
+Cube Sandbox
+Copyright (C) 2026 Tencent. All rights reserved.
+
+The open-source software included in this distribution may have been modified
+by Tencent ("Tencent Modifications"). All Tencent Modifications are
+Copyright (C) Tencent.
+
+Cube Sandbox is licensed under the Apache-2.0 except for the third-party
+components described in the LICENSE file.
+
+=== Fork Modifications ===
+
+The following modifications were made to the original CubeSandbox in this fork
+("Cube Container"):
+
+1. Added mcp-server-go/ — a Go MCP (Model Context Protocol) server exposing
+   121+ container orchestration tools for AI agents, with RBAC, rate limiting,
+   AES-256-GCM secrets management, and an audit hash chain.
+
+2. Added deploy/container-mode/ — Docker, Caddy (TLS+WAF+rate limit), and
+   one-click deployment configuration for container-mode operation.
+
+3. Added web/ — a React/Vite/Tailwind dashboard for cluster management.
+
+4. Added skills/ — operational runbooks for human and AI operators.
+
+5. Modified Cubelet and CubeMaster for container-mode (non-MicroVM) operation
+   with overlayfs storage and runc runtime.
+
+All modifications are Copyright (C) 2026 Brian Tomas Schwabauer and licensed
+under the Apache License, Version 2.0.
+
+=== Third-Party Components ===
+
+See the LICENSE file for the full list of third-party components and their
+licenses (kata-containers, cloud-hypervisor, cilium/bpf).

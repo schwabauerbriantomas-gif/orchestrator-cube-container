@@ -45,6 +45,25 @@
 }
 
 (waf) {
+    # ======================================================================
+    # DEFENSE-IN-DEPTH NOTICE (audit L-03)
+    # ---------------------------------------------------------------------
+    # These regex rules are a BEST-EFFORT defense-in-depth layer, NOT a
+    # primary security control. Regex-based WAF matching is trivially
+    # bypassed by encoding, fragmentation, or novel payloads, and must
+    # never be relied on as the sole input filter.
+    #
+    # The AUTHORITATIVE input validation lives in the Go backend
+    # (mcp-server-go/security.go): validateCommand, validatePathSafe,
+    # validateImageRef, validateRegistryURL, validateWebhookURL, etc.
+    # Those allowlist validators run on every tool call regardless of
+    # whether traffic reaches Caddy, and they are the security boundary.
+    #
+    # This snippet only adds belt-and-suspenders blocking for the most
+    # obvious noise payloads at the edge. Do not weaken security.go in
+    # the belief that this WAF catches everything — it does not.
+    # ======================================================================
+
     # Block SQL Injection
     @sqli {
         path_regexp sqli (?i)(union\s+select|union\s+all\s+select|or\s+1\s*=\s*1|;\s*drop\s+table|--\s)
