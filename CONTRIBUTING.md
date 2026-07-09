@@ -24,13 +24,13 @@ go test -race -v ./...
 
 ## Architecture
 
-The MCP server is a single Go binary with 129 tools. It auto-detects the backend
+The MCP server is a single Go binary with 161 tools. It auto-detects the backend
 (Docker or Cube) at runtime — no build tags needed.
 
 ```
 mcp-server-go/ (single binary, ~8.5MB)
 ├── server.go              — main(), manager init, HTTP middleware, stdio/HTTP mode
-├── tools_registration.go  — all 129 tool registrations via registerTool()
+├── tools_registration.go  — all 161 tool registrations via registerTool()
 ├── tools_helpers.go       — tool builders, arg extraction, handler registry (jobs)
 ├── handlers_basic.go      — cluster, containers, templates, deploy, volumes, backup
 ├── handlers_phase2.go     — images, deploy rollout, logs, envs, jobs, DBs, certs, events
@@ -59,7 +59,12 @@ mcp-server-go/ (single binary, ~8.5MB)
 ├── secure_sandbox.go      — KVM sandbox for untrusted code (egress, vault, snapshots)
 ├── metrics.go             — Prometheus endpoint
 ├── rollback.go            — Deploy versioning
-└── *_test.go              — Tests (security, auth, backup, e2e, bench, concurrency)
+├── hypervisor.go          — VM lifecycle via libvirt/virsh (13 tools)
+├── hypervisor_zfs.go      — ZFS storage management (12 tools)
+├── hypervisor_gpu.go      — GPU detection, monitoring, VFIO passthrough (4 tools)
+├── hypervisor_cloudinit.go— Cloud-init ISO generation, VM templates (3 tools)
+├── hypervisor_validate.go — Input validators for hypervisor tools (7 validators)
+└── *_test.go              — Tests (security, auth, backup, e2e, bench, concurrency, hypervisor)
 ```
 
 **One file per feature domain.** Handlers go in `handlers_*.go`, logic in `feature.go`.
@@ -163,8 +168,9 @@ The binary auto-detects the backend at startup — no build tags needed:
 - **Cube** (default for edge): if the Cube engine is detected, the CubeAPI backend is
   used. Override with `CUBE_BACKEND=cube`.
 
-Both backends implement the same `ContainerBackend` interface, so all 129 tools work
+Both backends implement the same `ContainerBackend` interface, so all 161 tools work
 on either. Some tools (secure sandbox, CubeCoW snapshots) require the Cube backend.
+Hypervisor tools (VM, ZFS, GPU) require libvirt and/or ZFS installed on the host.
 
 ## Commit Messages
 
@@ -214,7 +220,7 @@ Before adding any tool that accepts user input, consult the security checklist i
 - **Inter-node Docker** connections should use `CUBE_DOCKER_TLS=true` in production (AS-4)
 - **Audit trail** uses HMAC-SHA256 keyed with `CUBE_SECRETS_KEY` (AS-7)
 
-47 security issues have been identified and fixed across 5 audit rounds. See
+56 security issues have been identified and fixed across 7 audit rounds. See
 [README.md](README.md#security) for the full audit history.
 
 ## License
