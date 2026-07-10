@@ -24,13 +24,13 @@ go test -race -v ./...
 
 ## Architecture
 
-The MCP server is a single Go binary with 161 tools. It auto-detects the backend
+The MCP server is a single Go binary with 178 tools. It auto-detects the backend
 (Docker or Cube) at runtime — no build tags needed.
 
 ```
 mcp-server-go/ (single binary, ~8.5MB)
 ├── server.go              — main(), manager init, HTTP middleware, stdio/HTTP mode
-├── tools_registration.go  — all 161 tool registrations via registerTool()
+├── tools_registration.go  — all 178 tool registrations via registerTool()
 ├── tools_helpers.go       — tool builders, arg extraction, handler registry (jobs)
 ├── handlers_basic.go      — cluster, containers, templates, deploy, volumes, backup
 ├── handlers_phase2.go     — images, deploy rollout, logs, envs, jobs, DBs, certs, events
@@ -168,7 +168,7 @@ The binary auto-detects the backend at startup — no build tags needed:
 - **Cube** (default for edge): if the Cube engine is detected, the CubeAPI backend is
   used. Override with `CUBE_BACKEND=cube`.
 
-Both backends implement the same `ContainerBackend` interface, so all 161 tools work
+Both backends implement the same `ContainerBackend` interface, so all 178 tools work
 on either. Some tools (secure sandbox, CubeCoW snapshots) require the Cube backend.
 Hypervisor tools (VM, ZFS, GPU) require libvirt and/or ZFS installed on the host.
 

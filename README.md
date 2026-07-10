@@ -1,14 +1,14 @@
 # Cube Container
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
-[![MCP Server](https://img.shields.io/badge/MCP-161%20tools-orange)](https://modelcontextprotocol.io)
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8)](https://go.dev)
-[![Security Audit](https://img.shields.io/badge/Security-56%20issues%20fixed-red)](#security)
-[![Tests](https://img.shields.io/badge/Tests-90%2B%20passing-brightgreen)](#testing)
+[![MCP Server](https://img.shields.io/badge/MCP-178%20tools-orange)](https://modelcontextprotocol.io)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8)](https://go.dev)
+[![Security Audit](https://img.shields.io/badge/Security-91%20issues%20fixed-red)](#security)
+[![Tests](https://img.shields.io/badge/Tests-66%20passing-brightgreen)](#testing)
 
 A container orchestration platform controlled by AI through the Model Context Protocol. An MCP server that replaces the DevOps role — the operations interface is natural language, not YAML.
 
-161 tools covering the complete DevOps lifecycle: containers, images, deployments, scaling, health monitoring, networking, routing, secrets, backups, high availability, multi-node clusters, environments, notifications, scheduled jobs, database provisioning, certificates, event streaming, and **full hypervisor management** (VMs via KVM/libvirt, ZFS storage, GPU passthrough).
+178 tools covering the complete DevOps lifecycle: containers, images, deployments, scaling, health monitoring, networking, routing, secrets, backups, high availability, multi-node clusters, environments, notifications, scheduled jobs, database provisioning, certificates, event streaming, **full hypervisor management** (VMs via KVM/libvirt, ZFS storage, GPU passthrough, cloud-init), **TOTP 2FA** (Steam Guard style), and **Proxmox VE backend** integration.
 
 ## Architecture
 
@@ -56,9 +56,9 @@ docker build -t cube-container .
 docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock cube-container
 ```
 
-## Tool Reference (161 tools)
+## Tool Reference (178 tools)
 
-<!-- Tool count is verified by CI: `grep -c 'registerTool(s,' mcp-server-go/tools_registration.go` must equal 161. -->
+<!-- Tool count is verified by CI: `grep -c 'registerTool(s,' mcp-server-go/tools_registration.go` must equal 178. -->
 
 ### Cluster & Nodes (12)
 
@@ -366,21 +366,59 @@ These tools provide hardware-level isolation for running untrusted code. Each sa
 | `vm_template_list` | List available cloud images (qcow2, img, iso) | viewer |
 | `vm_create_from_template` | Create VM from cloud image + cloud-init seed (CoW overlay) | operator |
 
+### TOTP 2FA (4) — Steam Guard style
+
+RFC 6238 TOTP with HMAC-SHA1 (compatible with Google/Microsoft Authenticator). 12 destructive operations require TOTP if the API key has TOTP enrolled.
+
+| Tool | Description | Role |
+|------|-------------|------|
+| `totp_enroll` | Generate TOTP secret + `otpauth://` URL for QR enrollment | admin |
+| `totp_confirm` | Verify first TOTP code to activate 2FA on an API key | admin |
+| `totp_disable` | Disable TOTP on an API key (requires valid code) | admin |
+| `totp_status` | Check TOTP enrollment status for an API key | admin |
+
+**Security model:**
+- Human admin: password + TOTP mandatory
+- Automated agents/CI: API key without TOTP, restricted scope
+- Destructive ops (`delete_volume`, `vm_delete`, `restore_backup`, `zfs_destroy`, etc.): require `X-TOTP` header if key has TOTP enrolled
+
+### Proxmox VE Backend (13)
+
+REST API client for Proxmox VE. API token auth, TLS on by default, RBAC viewer/operator/admin. Auto-initializes when `CUBE_PROXMOX_HOST` env var is set.
+
+| Tool | Description | Role |
+|------|-------------|------|
+| `pve_list_vms` | List all VMs on Proxmox node | viewer |
+| `pve_get_vm` | Get VM details (status, config, resources) | viewer |
+| `pve_create_vm` | Create a new VM (cores, memory, disk, net) | admin |
+| `pve_start_vm` | Start a stopped VM | operator |
+| `pve_stop_vm` | Stop a running VM (graceful or force) | operator |
+| `pve_delete_vm` | Permanently delete a VM | admin |
+| `pve_migrate_vm` | Migrate VM to another node | admin |
+| `pve_list_snapshots` | List snapshots for a VM | viewer |
+| `pve_create_snapshot` | Create a VM snapshot | operator |
+| `pve_delete_snapshot` | Delete a VM snapshot | admin |
+| `pve_list_storage` | List storage pools with usage | viewer |
+| `pve_list_nodes` | List cluster nodes with status | viewer |
+| `pve_list_lxc` | List LXC containers | viewer |
+
 ## Security
 
 ### Audit History
 
-47 security issues identified and fixed across 5 audit rounds + Round 7 (hypervisor layer):
+91 security issues identified and fixed across 9 audit rounds (121 total findings, 30 deferred):
 
-| Round | Critical | High | Medium | Low | Total |
-|-------|----------|------|--------|-----|-------|
-| 1 | 4 (C1-C4) | 5 (H1-H5) | 5 (M1-M5) | 4 (B1-B4) | 18 |
-| 2 | 2 (C5-C6) | 3 (H6-H8) | 2 (M6-M7) | 1 (B5) | 8 |
-| 3 | 1 (C7) | 3 (H9-H11) | 3 (M8-M10) | 2 (B6-B7) | 9 |
-| 4 | 1 (C8) | 1 (H12) | 2 (M11-M12) | 1 (B8) | 5 |
-| 5 | — | 1 (AS-1) | 3 (AS-2, AS-3, AS-4) | 2 (AS-5, AS-6) | 7 |
-| 7 | 2 (HV-C1, HV-C2) | 3 (HV-H1, HV-H2, HV-H3) | 2 (HV-M1, HV-M2) | 2 (HV-L1, HV-L2) | 9 |
-| **Total** | **10** | **16** | **17** | **12** | **56** |
+| Round | Scope | Total | Fixed | Deferred |
+|-------|-------|-------|-------|----------|
+| R1-R4 | Core security (auth, path traversal, injection, RBAC) | 40 | 40 | 0 |
+| R5 | Attack surface (exec, sandbox, transport, webhook, HA) | 7 | 7 | 0 |
+| R7 | Hypervisor layer (shell injection, XML, path traversal, YAML) | 9 | 9 | 0 |
+| R8 | Deployment (Dockerfile, CI, entrypoint, Caddy) | 14 | 14 | 0 |
+| R9-Deploy | Deployment hardening (USER, digests, privileged, gosec SARIF) | 14 | 14 | 0 |
+| R9-Auth | Auth/crypto (heartbeat replay, webhook, HMAC, dead code) | 14 | 5 | 9 |
+| R9-Hyp | Hypervisor (temp files, ZFS validation, VNC, cloud-init) | 10 | 5 | 5 |
+| R9-MCP | MCP protocol (SSRF, metrics injection, secret leaks) | 12 | 6 | 6 |
+| **Total** | | **120** | **100** | **20** |
 
 Round 5 (Attack Surface Audit) findings:
 
@@ -411,18 +449,22 @@ Round 7 (Hypervisor Layer Audit) — 9 findings in the 32 new hypervisor tools:
 ### Security Features
 
 - **Auth**: API key + secret, timing-safe comparison
-- **RBAC**: 3 roles (viewer, operator, admin), per-tool permissions
-- **Rate limiting**: 120 req/min per key (global), 60 req/min per-IP on HA heartbeat (AS-6)
+- **TOTP 2FA**: RFC 6238 (HMAC-SHA1), Google/Microsoft Authenticator compatible, Steam Guard style (destructive ops require TOTP)
+- **RBAC**: 3 roles (viewer, operator, admin), per-tool permissions, fail-closed
+- **Rate limiting**: 60 req/min per key, 600 req/min per-IP, 60 req/min on HA heartbeat
 - **Audit logging**: tamper-evident **HMAC-SHA256** hash chain (keyed with `CUBE_SECRETS_KEY`), JSONL format
 - **Secrets**: AES-256-GCM encryption at rest, argon2id key derivation
-- **Input validation**: allowlist for commands, expanded denylist for exfiltration/reverse-shell patterns, path traversal protection, SSRF prevention
+- **Input validation**: allowlist for commands, expanded denylist for exfiltration/reverse-shell patterns, path traversal protection, SSRF prevention (RFC 1918, loopback, link-local, cloud metadata)
 - **TLS**: automatic via Caddy (Let's Encrypt), or native with cert files
 - **Inter-node TLS**: `CUBE_DOCKER_TLS=true` enables real TLS for remote Docker connections (AS-4). Plaintext emits a stderr warning.
-- **Body limiting**: configurable max request size
-- **Connection limiting**: per-IP max connections
+- **Body limiting**: 10MB max request size
+- **Connection limiting**: 64 per-IP max connections
 - **Network isolation**: inter-node TLS optional (`CUBE_NODE_TLS_CERT`)
-- **Exec timeout cap**: `exec_in_container` hard-capped at 300s (AS-2)
+- **Exec timeout cap**: `exec_in_container` and `secure_sandbox_exec` hard-capped at 300s (AS-2, R9-MCP-05)
 - **Webhook auth**: `X-Git-Token` header only — no query-param secrets (AS-5)
+- **Proxmox backend**: API token auth (never root password), TLS on by default, auto-init via env vars
+- **gosec**: SARIF enforcement — CI fails on new HIGH/CRITICAL findings (14 rules excluded with documented justification)
+- **govulncheck**: 0 vulnerabilities (MCP server + CubeMaster)
 
 ### Validators
 
@@ -480,6 +522,10 @@ Round 7 (Hypervisor Layer Audit) — 9 findings in the 32 new hypervisor tools:
 | `CUBE_HEALTH_ROOT` | `/var/lib/cube-container/health` | Health check configs |
 | `CUBE_SERVICES_ROOT` | `/var/lib/cube-container/services` | Service definitions |
 | `CUBE_ALLOW_INSECURE_GIT` | `false` | Allow http:// git URLs |
+| `CUBE_PROXMOX_HOST` | — | Proxmox VE API host (e.g. `pve1.lan:8006`). Auto-initializes Proxmox backend when set. |
+| `CUBE_PROXMOX_TOKEN` | — | Proxmox API token (format: `user@realm!tokenid=secret`) |
+| `CUBE_PROXMOX_NODE` | — | Default Proxmox node name for operations |
+| `CUBE_PROXMOX_INSECURE_TLS` | `false` | Skip TLS verification for Proxmox API (dev only) |
 
 ## Testing
 
@@ -491,7 +537,7 @@ go test -race -count=1 ./...
 go test -bench=. -benchmem ./...
 ```
 
-40 tests covering security validators, auth/RBAC, backup/restore, e2e flows, concurrency stress tests.
+66 tests covering security validators, auth/RBAC, TOTP 2FA, backup/restore, e2e flows, concurrency stress tests.
 
 ## Build
 
@@ -509,23 +555,27 @@ Binary size: ~8.5MB (statically linked, no CGO).
 
 ```
 mcp-server-go/
-├── server.go            — main(), managers, HTTP middleware, stdio/HTTP mode
-├── tools_registration.go — all 161 tool registrations via registerTool()
+├── server.go            — main(), managers, HTTP middleware, stdio/HTTP mode, Proxmox init
+├── tools_registration.go — all 178 tool registrations via registerTool()
 ├── tools_helpers.go     — tool builders, arg extraction, handler registry (jobs)
 ├── handlers_basic.go    — handlers: cluster, containers, templates, deploy, volumes, backup
-├── handlers_phase2.go   — handlers: images, deploy, logs, envs, jobs, DBs, certs, events
+├── handlers_phase2.go   — handlers: images, deploy, logs, envs, jobs, DBs, certs, events, notifications
 ├── handlers_secure.go   — handlers: secure sandbox operations
+├── totp.go              — TOTP RFC 6238 (HMAC-SHA1, 30s period, ±30s skew)
+├── totp_handlers.go     — 4 MCP handlers: enroll, confirm, disable, status
+├── proxmox_client.go    — Proxmox VE REST API client
+├── proxmox_tools.go     — 13 MCP handlers: pve_* (VMs, snapshots, storage, nodes)
 ├── backend.go           — ContainerBackend interface + auto-detection
 ├── docker_client.go     — Docker Engine API backend
 ├── client.go            — CubeAPI backend
-├── auth.go              — API keys, RBAC, rate limiting, audit hash chain
+├── auth.go              — API keys, RBAC, rate limiting, audit hash chain, TOTP integration
 ├── auth_tokens.go       — Programmatic token management (create/list/revoke)
-├── security.go          — Input validators (command, path, URL, container ID)
+├── security.go          — Input validators (command, path, URL, container ID, SSRF)
 ├── images.go            — Docker image lifecycle (build/push/pull/list/tag)
 ├── deploy.go            — Git deploy + persistent volumes + version tracking
 ├── deploy_rollout.go    — Rolling + blue-green deployment
 ├── scaling.go           — Replica management + load balancing
-├── health.go            — Health probes + auto-restart watcher
+├── health.go            — Health probes + auto-restart watcher + SSRF prevention
 ├── nodes.go             — Multi-node cluster management
 ├── volumes.go           — Volume lifecycle + SSH migration
 ├── discovery.go         — Service discovery registry
@@ -537,7 +587,7 @@ mcp-server-go/
 ├── backup.go            — Backup + restore + integrity verification
 ├── routing.go           — Caddy routes + TLS
 ├── networking.go        — Port mappings, DNS aliases, network policies
-├── ha.go                — Active-passive failover + heartbeat
+├── ha.go                — Active-passive failover + heartbeat (replay protection)
 ├── jobs.go              — Scheduled jobs with real tool execution
 ├── log_aggregation.go   — Multi-container log search
 ├── audit_query.go       — Audit trail search
@@ -546,18 +596,23 @@ mcp-server-go/
 ├── databases.go         — Managed DB provisioning
 ├── certificates.go      — TLS cert inspection
 ├── events.go            — Cluster event stream
-├── metrics.go           — Prometheus metrics export
+├── metrics.go           — Prometheus metrics export (label injection prevention)
 ├── metrics_query.go     — Programmatic metrics query
 ├── secure_sandbox.go    — KVM sandbox for untrusted code
+├── hypervisor.go        — KVM/libvirt VM lifecycle (13 tools)
+├── hypervisor_zfs.go    — ZFS storage management (12 tools)
+├── hypervisor_gpu.go    — GPU passthrough (NVIDIA/AMD/Intel, 4 tools)
+├── hypervisor_cloudinit.go — Cloud-init & template management (3 tools)
+├── hypervisor_validate.go — 15 validators for hypervisor inputs
 ├── scheduler.go         — Bin-packing node scheduler
 ├── rollback.go          — Deployment versioning + rollback
 ├── logstream.go         — SSE log streaming endpoint
 ├── webhook.go           — Git webhook endpoint
 ├── Dockerfile           — Multi-stage build (Go + Caddy)
-├── Caddyfile            — TLS 1.3 + WAF + rate limiting
+├── Caddyfile            — TLS 1.3 + WAF + rate limiting + /metrics IP allowlist
 ├── ARCHITECTURE.md      — Codebase map for AI agents
 ├── AGENT_GUIDE.md       — Conventions for working on this codebase
-└── *_test.go            — Tests (security, auth, backup, e2e, bench, concurrency)
+└── *_test.go            — Tests (security, auth, TOTP, backup, e2e, bench, concurrency)
 ```
 
 ## Documentation
@@ -591,10 +646,17 @@ The `skills/` directory contains playbooks that teach the AI model how to chain 
 
 ### Security
 - [x] ~~Network isolation for database containers~~ (partially via network policies)
+- [x] ~~TOTP 2FA (RFC 6238, Steam Guard style)~~ — implemented in v0.9.0-beta
+- [x] ~~SSRF prevention on health probes~~ — `isPrivateHost()` blocks RFC 1918, loopback, link-local, cloud metadata (R9-MCP-04)
+- [x] ~~HA heartbeat replay protection~~ — timestamp validation + monotonic counter (R9-AUTH-01)
+- [x] ~~gosec SARIF enforcement in CI~~ — 14 exclusiones documentadas, 2 fixes (G110, G115)
 - [ ] Hardened container defaults (seccomp + AppArmor + cap-drop)
 - [ ] `--runtime` parameter for gVisor/Kata/Firecracker support
 - [ ] `CUBE_SECURE_RUNTIME` env var for node-level isolation default
 - [ ] Enforce `CUBE_DOCKER_TLS=true` in production (currently warns on plaintext)
+- [ ] Migrate gosec global exclusions to targeted `#nosec` comments (R9-AUTH-08)
+- [ ] Error message sanitization — map Docker/CubeAPI errors to generic messages (R9-MCP-01)
+- [ ] CORS middleware with strict origin allowlist (R9-MCP-03)
 
 ### Untrusted Code Hosting
 - [ ] gVisor (`runsc`) support for edge nodes (4GB RAM)

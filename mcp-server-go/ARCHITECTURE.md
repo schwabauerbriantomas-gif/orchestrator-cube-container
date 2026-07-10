@@ -7,7 +7,7 @@
 ## Overview
 
 Cube Container is a container orchestration platform controlled entirely through
-MCP (Model Context Protocol). An AI agent communicates with it using 161 tools.
+MCP (Model Context Protocol). An AI agent communicates with it using 178 tools.
 The primary operations interface IS natural language — a React web dashboard
 exists for status visualization, but all control flows through MCP.
 
@@ -15,15 +15,16 @@ exists for status visualization, but all control flows through MCP.
 ┌──────────┐     ┌──────────────────────────────────────────┐     ┌──────────┐
 │ AI Agent │ ──► │ MCP Server (Go)                          │ ──► │ Backend  │
 │ (Claude, │     │                                          │     │ Docker / │
-│  GPT...) │     │  ┌─────────┐  ┌──────────┐  ┌────────┐  │     │ Cube     │
-│          │ ◄── │  │ 161     │  │ Auth +   │  │ 11     │  │     │ Engine   │
-│          │     │  │ Tools   │  │ RBAC +   │  │ Watch  │  │     │          │
+│  GPT...) │     │  ┌─────────┐  ┌──────────┐  ┌────────┐  │     │ Cube /   │
+│          │ ◄── │  │ 178     │  │ Auth +   │  │ 11     │  │     │ Proxmox  │
+│          │     │  │ Tools   │  │ RBAC +   │  │ Watch  │  │     │ Engine   │
 │          │     │  │         │  │ Rate     │  │ Loops  │  │     └──────────┘
 │          │     │  └─────────┘  │ Limit +  │  └────────┘  │
-│          │     │               │ Audit    │              │     ┌──────────┐
-│          │     │               └──────────┘              │ ──► │ Caddy    │
-│          │     │                 stdio / HTTP             │     │ TLS+WAF  │
-│          │     └──────────────────────────────────────────┘     └──────────┘
+│          │     │               │ Audit +  │              │     ┌──────────┐
+│          │     │               │ TOTP 2FA │              │ ──► │ Caddy    │
+│          │     │               └──────────┘              │     │ TLS+WAF  │
+│          │     │                 stdio / HTTP             │     └──────────┘
+│          │     └──────────────────────────────────────────┘
 ```
 
 ## Code Organization
@@ -37,7 +38,7 @@ Every `.go` file falls into exactly one of these categories:
 | File | Responsibility |
 |------|---------------|
 | `server.go` | `main()`, manager initialization, HTTP middleware, stdio/HTTP mode |
-| `tools_registration.go` | Tool registration (`registerAllTools`), all 161 `registerTool` calls |
+| `tools_registration.go` | Tool registration (`registerAllTools`), all 178 `registerTool` calls |
 | `tools_helpers.go` | Tool builders, arg extraction, handler registry (for scheduled jobs) |
 | `handlers_basic.go` | Handlers for cluster, containers, templates, deploy, volumes, backup |
 | `handlers_phase2.go` | Handlers for images, deploy rollout, logs, envs, jobs, DBs, certs, events |
@@ -79,7 +80,7 @@ feature_name.go
 > the "Tools" column below is 114; the remaining 15 tools (cluster health,
 > container CRUD, templates, exec, backend_info) have no dedicated feature
 > file — they call the backend directly from the handler. Additionally there
-> are 32 hypervisor tools (VM, ZFS, GPU, cloud-init). Total: **161**.
+> are 32 hypervisor tools (VM, ZFS, GPU, cloud-init). Total: **178**.
 
 | File | Feature | Tools |
 |------|---------|-------|

@@ -6,7 +6,7 @@ A container orchestration platform controlled by AI through the Model Context Pr
 (MCP). Instead of YAML files and CLI tools, you describe what you want in natural language
 and the MCP server executes it.
 
-**161 tools** covering: containers, images, deploy, scaling, health, networking,
+**178 tools** covering: containers, images, deploy, scaling, health, networking,
 secrets, backup, HA, environments, VMs (libvirt), ZFS storage, GPU passthrough,
 and cloud-init provisioning.
 
