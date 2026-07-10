@@ -90,10 +90,13 @@ jobs:
 
       - name: Vet
         working-directory: ${{ matrix.component }}
+        env:
+          CGO_ENABLED: "0"
         run: |
           # Run go vet on cmd/ only (our code). pkg/ is legacy Tencent
           # with pre-existing vet warnings (lock copies, printf format)
           # that we track but don't fix in fork code.
+          # CGO_ENABLED=0 avoids cubecow.h compilation error (CGO package).
           go vet ./cmd/... 2>&1 || {
             echo "::error::go vet found issues in ${{ matrix.component }}/cmd/"
             exit 1
@@ -129,10 +132,11 @@ jobs:
           # G304: file path from variable (validated by our validators)
           # -exclude-dir: skip legacy Tencent code (forked, not our responsibility)
           # NOTE: gosec v2.22.5 has an SSA panic bug on some code. We use
-          # -exclude-rules=G104,G304 instead of -no-fail so that REAL findings
-          # (injection, crypto, etc.) still fail CI. The SSA panic is caught
-          # by the trailing '|| true' on the SARIF generation step only.
-          args: -fmt sarif -out gosec-results.sarif -exclude-dir=Cubelet -exclude-dir=CubeMaster -exclude-rules=G104,G304 ./mcp-server-go/...
+          # -exclude instead of -no-fail so that REAL findings (injection,
+          # crypto, etc.) still fail CI. Only G104 (unchecked errors) and
+          # G304 (file path from variable) are excluded — both are handled
+          # by our explicit validators in security.go.
+          args: -fmt sarif -out gosec-results.sarif -exclude-dir=Cubelet -exclude-dir=CubeMaster -exclude=G104,G304 ./mcp-server-go/...
 
       - name: Govulncheck (MCP server only)
         uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1
