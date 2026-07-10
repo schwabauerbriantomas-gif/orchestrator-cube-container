@@ -38,8 +38,6 @@ const (
 	defaultKeyPath = "/var/lib/cube-container/keys/secrets.key"
 	// defaultSaltPath is where the passphrase salt is persisted (M4).
 	defaultSaltPath = "/var/lib/cube-container/keys/secrets.salt"
-	// passphraseIter is the iteration count for passphrase-derived keys (PBKDF2-like).
-	passphraseIter = 100000
 )
 
 // ---- Types ----
@@ -132,7 +130,7 @@ func resolveEncryptionKey() ([]byte, error) {
 	if passphrase := os.Getenv("CUBE_SECRETS_PASSPHRASE"); passphrase != "" {
 		fmt.Fprintln(os.Stderr, "[cube-mcp] WARNING: using passphrase-derived key — this is less secure than CUBE_SECRETS_KEY")
 		salt := derivePassphraseSalt()
-		key := deriveKeyFromPassphrase(passphrase, salt, passphraseIter)
+		key := deriveKeyFromPassphrase(passphrase, salt)
 		return key, nil
 	}
 
@@ -198,7 +196,7 @@ func derivePassphraseSalt() []byte {
 // OWASP 2023 recommends argon2id as the primary KDF. If argon2 is somehow
 // unavailable (shouldn't happen — it's vendored), falls back to PBKDF2 with
 // 600K iterations (OWASP minimum for PBKDF2-SHA256).
-func deriveKeyFromPassphrase(passphrase string, salt []byte, iterations int) []byte {
+func deriveKeyFromPassphrase(passphrase string, salt []byte) []byte {
 	// Argon2id: 3 passes, 64MB memory, 4 threads, 32-byte output.
 	// These parameters are tuned to complete in <1s on commodity hardware
 	// while requiring ~64MB to evaluate (blocking GPU/ASIC parallelization).

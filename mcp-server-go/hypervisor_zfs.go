@@ -149,6 +149,10 @@ func handleZPoolStatus(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToo
 		}
 		return okResult(map[string]string{"status_output": out}), nil
 	}
+	// R9-HYP-02: validate pool name to prevent argument injection
+	if err := validateZFSDatasetName(name); err != nil {
+		return errResult(fmt.Sprintf("invalid pool name: %v", err)), nil
+	}
 
 	out, err := runZpool("status", name)
 	if err != nil {
@@ -185,6 +189,12 @@ func handleZDatasetList(_ context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 	}
 
 	pool := argString(req.GetArguments(), "pool")
+	// R9-HYP-02: validate pool name to prevent argument injection
+	if pool != "" {
+		if err := validateZFSDatasetName(pool); err != nil {
+			return errResult(fmt.Sprintf("invalid pool name: %v", err)), nil
+		}
+	}
 
 	args := []string{"list", "-t", "filesystem", "-o", "name,used,avail,refer,mountpoint", "-r"}
 	if pool != "" {
@@ -310,6 +320,12 @@ func handleZSnapshotList(_ context.Context, req mcp.CallToolRequest) (*mcp.CallT
 	}
 
 	dataset := argString(req.GetArguments(), "dataset")
+	// R9-HYP-02: validate dataset name to prevent argument injection
+	if dataset != "" {
+		if err := validateZFSDatasetName(dataset); err != nil {
+			return errResult(fmt.Sprintf("invalid dataset name: %v", err)), nil
+		}
+	}
 
 	args := []string{"list", "-t", "snapshot", "-o", "name,used,creation", "-r"}
 	if dataset != "" {

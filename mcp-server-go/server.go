@@ -261,6 +261,10 @@ func main() {
 				os.Exit(1)
 			}
 		} else {
+			// R9-AUTH-06: Warn when running in plaintext HTTP mode — credentials traverse the network in cleartext.
+			fmt.Fprintf(os.Stderr, "[cube-mcp] ⚠ WARNING: running in plaintext HTTP mode (no TLS). "+
+				"API keys, secrets, and TOTP codes will be sent in cleartext. "+
+				"Set CUBE_TLS_CERT and CUBE_TLS_KEY, or use the Caddy reverse proxy with TLS.\n")
 			if err := httpServer.Serve(ln); err != nil {
 				fmt.Fprintf(os.Stderr, "[cube-mcp] error: %v\n", err)
 				os.Exit(1)

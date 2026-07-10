@@ -99,7 +99,7 @@ func handleVMCloudInitCreate(_ context.Context, req mcp.CallToolRequest) (*mcp.C
 
 	// Create seed directory
 	seedDir := filepath.Join(defaultSeedDir, spec.Hostname)
-	if err := os.MkdirAll(seedDir, 0755); err != nil {
+	if err := os.MkdirAll(seedDir, 0700); err != nil { // R9-HYP-10: restrict perms, seed ISO may contain passwords
 		return errResult(fmt.Sprintf("failed to create seed dir: %v", err)), nil
 	}
 
@@ -320,7 +320,7 @@ func generateUserData(spec *CloudInitSpec) string {
 }
 
 func generateMetaData(spec *CloudInitSpec) string {
-	return fmt.Sprintf("instance-id: %s\ntocal-hostname: %s\n",
+	return fmt.Sprintf("instance-id: %s\nlocal-hostname: %s\n",
 		spec.Hostname, spec.Hostname)
 }
 

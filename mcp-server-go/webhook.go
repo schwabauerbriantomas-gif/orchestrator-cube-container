@@ -63,6 +63,23 @@ type webhookResponse struct {
 func handleGitWebhook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// R9-AUTH-03: Refuse to process webhooks when disabled or when no secret is configured.
+	// Without a secret, any external party can trigger arbitrary git deployments.
+	if !webhookConfig.enabled {
+		writeWebhookJSON(w, http.StatusNotFound, webhookResponse{
+			Status:  "error",
+			Message: "webhooks are not enabled (set CUBE_WEBHOOK_ENABLED=true)",
+		})
+		return
+	}
+	if webhookConfig.secret == "" {
+		writeWebhookJSON(w, http.StatusForbidden, webhookResponse{
+			Status:  "error",
+			Message: "webhook secret not configured — refusing to accept unauthenticated deployment triggers (set CUBE_WEBHOOK_SECRET)",
+		})
+		return
+	}
+
 	// Method check
 	if r.Method != http.MethodPost {
 		writeWebhookJSON(w, http.StatusMethodNotAllowed, webhookResponse{

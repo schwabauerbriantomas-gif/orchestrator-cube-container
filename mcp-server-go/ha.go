@@ -292,6 +292,18 @@ func (m *HAManager) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// R9-AUTH-01: Replay protection — reject heartbeats with stale timestamps.
+	// Accept ±10 seconds skew (heartbeat interval is typically 2s).
+	parsedTs, err := time.Parse(time.RFC3339Nano, hb.Timestamp)
+	if err != nil {
+		http.Error(w, "invalid heartbeat timestamp format", http.StatusUnauthorized)
+		return
+	}
+	if abs := time.Since(parsedTs); abs > 10*time.Second {
+		http.Error(w, fmt.Sprintf("stale heartbeat (timestamp skew: %v)", abs), http.StatusUnauthorized)
+		return
+	}
+
 	m.mu.Lock()
 	// Record the heartbeat from the active node.
 	m.lastHeartbeat = time.Now()
@@ -340,11 +352,12 @@ func (m *HAManager) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"status":"ok"}`))
 }
 
-// computeHeartbeatHMAC returns the hex-encoded HMAC-SHA256 of fromID+timestamp
+// computeHeartbeatHMAC returns the hex-encoded HMAC-SHA256 of fromID:timestamp
 // keyed by the shared secret. Used for heartbeat authentication (M1).
+// R9-AUTH-10: Uses ':' delimiter to prevent ambiguous concatenation.
 func computeHeartbeatHMAC(secret, fromID, timestamp string) string {
 	h := hmac.New(sha256.New, []byte(secret))
-	h.Write([]byte(fromID + timestamp))
+	h.Write([]byte(fromID + ":" + timestamp))
 	return hex.EncodeToString(h.Sum(nil))
 }
 

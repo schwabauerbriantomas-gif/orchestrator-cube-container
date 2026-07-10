@@ -224,10 +224,18 @@ func handleVMCreate(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolRe
 	}
 
 	// Write XML to temp file, define from it
-	tmpPath := "/tmp/cube-vm-" + cfg.Name + ".xml"
-	if err := os.WriteFile(tmpPath, []byte(domXML), 0600); err != nil {
+	// R9-HYP-01: Use CreateTemp for unpredictable filename (prevents symlink/TOCTOU attacks)
+	tmpFile, err := os.CreateTemp("", "cube-vm-*.xml")
+	if err != nil {
+		return errResult(fmt.Sprintf("failed to create temp XML file: %v", err)), nil
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath) // R9-HYP-01: always cleanup
+	if _, err := tmpFile.Write([]byte(domXML)); err != nil {
+		tmpFile.Close()
 		return errResult(fmt.Sprintf("failed to write XML: %v", err)), nil
 	}
+	tmpFile.Close()
 
 	// Define (persistent) + start
 	_, err = runVirsh("define", tmpPath)
@@ -556,7 +564,7 @@ const domainXMLTemplate = `<domain type='{{.DomainType}}'>
     <console type='pty'>
       <target type='serial' port='0'/>
     </console>
-    <graphics type='vnc' port='-1' autoport='yes' listen='0.0.0.0'/>
+    <graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'/>
     <video>
       <model type='cirrus' vram='16384' heads='1'/>
     </video>
