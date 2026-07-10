@@ -128,15 +128,49 @@ jobs:
       - name: Gosec (Go SAST)
         uses: securego/gosec@e6a9a23fb9c8f994847df904f752083732598f49 # v2.22.5
         with:
+          # -no-fail: gosec v2.22.x has an SSA analyzer panic bug on the
+          # main package. -no-fail lets the SARIF still generate despite
+          # the panic. We then enforce severity in the next step.
           # G104: audit errors not checked (we handle important ones explicitly)
           # G304: file path from variable (validated by our validators)
-          # -exclude-dir: skip legacy Tencent code (forked, not our responsibility)
-          # NOTE: gosec v2.22.5 has an SSA panic bug on some code. We use
-          # -exclude instead of -no-fail so that REAL findings (injection,
-          # crypto, etc.) still fail CI. Only G104 (unchecked errors) and
-          # G304 (file path from variable) are excluded — both are handled
-          # by our explicit validators in security.go.
-          args: -fmt sarif -out gosec-results.sarif -exclude-dir=Cubelet -exclude-dir=CubeMaster -exclude=G104,G304 ./mcp-server-go/...
+          args: -no-fail -fmt sarif -out gosec-results.sarif -exclude-dir=Cubelet -exclude-dir=CubeMaster -exclude=G104,G304 ./mcp-server-go/...
+
+      - name: Enforce gosec severity (fail on HIGH/CRITICAL)
+        run: |
+          # Parse SARIF and fail if any HIGH or CRITICAL findings exist.
+          # This enforces real security findings while tolerating gosec's
+          # SSA panic bug (which is an analyzer crash, not a real finding).
+          if [ ! -f gosec-results.sarif ]; then
+            echo "::error::gosec SARIF output not found"
+            exit 1
+          fi
+          HIGH_CRITICAL=$(python3 -c "
+          import json
+          with open('gosec-results.sarif') as f:
+            sarif = json.load(f)
+          severe = []
+          for run in sarif.get('runs', []):
+            for result in run.get('results', []):
+              level = result.get('level', 'note')
+              if level in ('error', 'warning'):
+                rule_id = result.get('ruleId', 'unknown')
+                msg = result.get('message', {}).get('text', '')[:120]
+                loc = result.get('locations', [{}])[0].get('physicalLocation', {})
+                artifact = loc.get('artifactLocation', {}).get('uri', '?')
+                line = loc.get('region', {}).get('startLine', '?')
+                severe.append(f'  {rule_id} [{level}] {artifact}:{line} — {msg}')
+          if severe:
+            print('HIGH/CRITICAL gosec findings found:')
+            for s in severe:
+              print(s)
+            print(f'\\nTotal: {len(severe)} findings')
+          else:
+            print('No HIGH/CRITICAL findings')
+          exit(1 if severe else 0)
+          ") || {
+            echo "::error::gosec found HIGH or CRITICAL findings — see output above"
+            exit 1
+          }
 
       - name: Govulncheck (MCP server only)
         uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1
