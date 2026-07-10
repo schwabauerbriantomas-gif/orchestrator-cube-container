@@ -4,7 +4,6 @@
 package image
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -16,8 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/containerd/containerd/archive"
-	"github.com/containerd/containerd/archive/compression"
 	"github.com/google/go-containerregistry/pkg/authn"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -244,8 +241,6 @@ func StreamRegistryToDir(ctx context.Context, source *PreparedSource, destDir st
 
 	// Step 2: Sequentially apply and immediately delete layers as they finish downloading.
 	eg.Go(func() error {
-		var br *bufio.Reader
-
 		for i := 0; i < len(layers); i++ {
 			select {
 			case <-egCtx.Done():
@@ -263,30 +258,20 @@ func StreamRegistryToDir(ctx context.Context, source *PreparedSource, destDir st
 				return fmt.Errorf("native export failed to open prefetched layer %d: %w", i, err)
 			}
 
-			// Reuse the same large buffer across all layers since extraction is strictly sequential.
-			if br == nil {
-				br = bufio.NewReaderSize(f, nativeCopyBufferSize)
-			} else {
-				br.Reset(f)
-			}
-
-			decompressed, err := compression.DecompressStream(br)
+			decompressed, err := decompressStream(f)
 			if err != nil {
 				_ = f.Close()
 				return fmt.Errorf("native export failed to decompress layer %d: %w", i, err)
 			}
-			// WithNoSameOwner,it squashes all uid/gid to the
-			// unpacking user (root), breaking images with non-root-owned files.
-			_, applyErr := archive.Apply(egCtx, destDir, decompressed)
+
+			_, applyErr := applyTar(egCtx, destDir, decompressed)
 			_ = decompressed.Close()
-			_ = f.Close() // safe to double close, ensures FD is freed immediately
+			_ = f.Close()
 
 			if applyErr != nil {
 				return fmt.Errorf("native export failed to apply layer %d to %q (Hint: this might require root privileges, CAP_MKNOD, or a destination filesystem that supports xattrs/capabilities): %w", i, destDir, applyErr)
 			}
 
-			// TODO: Cache layers securely per-tenant.
-			// Delete temp file immediately to save disk space.
 			_ = os.Remove(path)
 		}
 		return nil
