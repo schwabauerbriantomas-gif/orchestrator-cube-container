@@ -72,7 +72,7 @@ governor = { version = "0.6", features = ["dashmap"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
 # ── Validation ────────────────────────────────────────────────────────────
-validator = { version = "0.16", features = ["derive"] }
+validator = { version = "0.19", features = ["derive"] }
 
 # ── Async trait support ───────────────────────────────────────────────────
 async-trait = "0.1"
