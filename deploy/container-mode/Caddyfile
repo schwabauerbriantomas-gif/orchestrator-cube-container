@@ -104,10 +104,21 @@
         reverse_proxy localhost:8080
     }
 
-    # Metrics + health (internal)
-    @internal path /metrics /health
-    handle @internal {
+    # Health endpoint (public — safe to expose)
+    @health path /health
+    handle @health {
         reverse_proxy localhost:8080
+    }
+
+    # Metrics endpoint (restricted to private networks — contains
+    # operational data that shouldn't be public)
+    @metrics path /metrics
+    handle @metrics {
+        @allowed remote_ip 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1
+        handle @allowed {
+            reverse_proxy localhost:8080
+        }
+        respond 403
     }
 
     log {

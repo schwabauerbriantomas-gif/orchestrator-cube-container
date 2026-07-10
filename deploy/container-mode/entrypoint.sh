@@ -1,8 +1,13 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Cube Container — Single Node Entrypoint
 # Starts containerd, CubeMaster, Cubelet, CubeAPI, MCP server, and Caddy.
+#
+# All services run as background jobs. We use `wait -n` (bash 4.3+) to
+# detect if ANY child exits prematurely — if one dies, the container
+# exits so the orchestrator can restart it. This prevents silent
+# degradation (e.g., Caddy dies but MCP keeps running unproxied).
 
 echo "[cube-container] Starting containerd..."
 containerd &
@@ -52,5 +57,11 @@ echo "[cube-container]   MCP:      http://localhost:8080 (internal)"
 echo "[cube-container]   Caddy:    :80/:443 (public TLS)"
 echo "[cube-container]   WebUI:    served via Caddy"
 
-# Keep container alive
-wait
+# Wait for ANY child to exit. If one dies, log it and exit the container
+# so the orchestrator (Docker/k8s) can restart all services cleanly.
+# This prevents silent degradation where one critical service is down
+# but the container appears healthy.
+wait -n 2>/dev/null || wait
+EXIT_CODE=$?
+echo "[cube-container] WARNING: a child process exited (code=$EXIT_CODE). Shutting down."
+exit "$EXIT_CODE"
