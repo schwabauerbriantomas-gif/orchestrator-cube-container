@@ -18,7 +18,7 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" //nosec G505 -- SHA1 required by RFC 6238 TOTP; all authenticator apps (Google, Microsoft, Authy) use HMAC-SHA1. Not used for password hashing or digital signatures.
 	"encoding/base32"
 	"encoding/binary"
 	"fmt"
@@ -39,7 +39,7 @@ const (
 
 // totpAlgorithm is HMAC-SHA1 (RFC 6238 default, compatible with all
 // authenticator apps including Google/Microsoft Authenticator).
-var totpAlgorithm = sha1.New
+var totpAlgorithm = sha1.New //nosec G505 -- required by RFC 6238, see import annotation
 
 // ---- TOTP secret store ----
 
