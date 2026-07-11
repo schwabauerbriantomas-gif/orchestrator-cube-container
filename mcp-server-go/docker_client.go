@@ -23,10 +23,16 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// dockerAPIPathRe validates Docker Engine API paths to prevent SSRF.
+// Allows: /containers/json, /images/{id}/json, /networks, /volumes, etc.
+// Blocks: protocol-relative URLs, query injection, path traversal.
+var dockerAPIPathRe = regexp.MustCompile(`^/[a-zA-Z0-9._/\-]+$`)
 
 // DockerClient is the Docker Engine API backend. It mirrors CubeClient's method
 // set but communicates with the local Docker daemon over a unix socket.
@@ -93,6 +99,11 @@ func newDockerClientWithTransport(address, transport string) *DockerClient {
 // dockerRequest performs an HTTP request against the Docker Engine API and
 // returns the raw status code and body bytes.
 func (c *DockerClient) dockerRequest(ctx context.Context, method, path string, body interface{}, query url.Values) (int, []byte, error) {
+	// Sanitize path — only allow safe URL path characters to prevent SSRF.
+	// Docker API paths match /^\/v?\d*(\.\d+)?\/[a-zA-Z0-9._\/-]*$/
+	if !dockerAPIPathRe.MatchString(path) {
+		return 0, nil, fmt.Errorf("invalid docker API path: %q", path)
+	}
 	u := "http://docker/" + c.APIVersion + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
@@ -107,7 +118,7 @@ func (c *DockerClient) dockerRequest(ctx context.Context, method, path string, b
 		bodyReader = bytes.NewReader(b)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, u, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, u, bodyReader) //nosec G704 -- path validated by dockerAPIPathRe above
 	if err != nil {
 		return 0, nil, fmt.Errorf("build request: %w", err)
 	}
@@ -115,7 +126,7 @@ func (c *DockerClient) dockerRequest(ctx context.Context, method, path string, b
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.HTTP.Do(req)
+	resp, err := c.HTTP.Do(req) //nosec G704 -- path validated by dockerAPIPathRe above
 	if err != nil {
 		return 0, nil, fmt.Errorf("docker request %s %s: %w", method, path, err)
 	}

@@ -518,7 +518,15 @@ func (bm *BackupManager) tarGzDirectory(src, dst, prefix string) (*tarResult, er
 		if !info.Mode().IsRegular() {
 			return nil
 		}
-		data, err := os.Open(path)
+		// Guard against symlink swap between WalkDir and Open (TOCTOU).
+		realPath, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return nil
+		}
+		if realPath != path {
+			return nil
+		}
+		data, err := os.Open(path) //nosec G304 G122 -- path came from WalkDir; symlink swap checked above
 		if err != nil {
 			return nil
 		}

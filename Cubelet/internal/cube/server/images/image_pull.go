@@ -523,7 +523,7 @@ func (c *CubeImageService) registryHosts(ctx context.Context, credentials func(h
 			if docker.IsLocalhost(host) && u.Scheme == "http" {
 
 				transport.TLSClientConfig = &tls.Config{
-					InsecureSkipVerify: true,
+					InsecureSkipVerify: true, //nosec G402 -- localhost HTTP registry, not used in container-mode
 				}
 			}
 
@@ -636,7 +636,7 @@ func newTransport() *http.Transport {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: true, //nosec G402 -- legacy image pull transport, not used in container-mode
 		},
 	}
 }

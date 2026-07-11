@@ -436,6 +436,9 @@ func validateContainerID(id string) error {
 	return nil
 }
 
+// validateHostname is defined in hypervisor_validate.go (RFC 1123 subset).
+// Reused for SSH target host validation in volumes.go.
+
 // sensitiveMountPaths lists host paths that must never be used as a container
 // mount path inside a container. Prevents container escape via path traversal.
 var sensitiveMountPaths = []string{

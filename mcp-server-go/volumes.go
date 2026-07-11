@@ -494,6 +494,10 @@ func (vm *VolumeManager) VolumeMigrate(volumeName, fromNode, toNode string) (map
 	if targetHost == "" {
 		return nil, fmt.Errorf("could not determine SSH host for node %s", toNode)
 	}
+	// Validate hostname — prevent shell metacharacter injection via node registry.
+	if err := validateHostname(targetHost); err != nil {
+		return nil, fmt.Errorf("invalid SSH target host %q: %w", targetHost, err)
+	}
 
 	// The remote path mirrors the local layout.
 	remoteVolRoot := vm.deploy.VolumesRoot

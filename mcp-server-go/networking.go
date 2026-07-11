@@ -411,7 +411,7 @@ func (nm *NetworkManager) removeFromHosts(alias string) {
 			kept = append(kept, line)
 		}
 	}
-	os.WriteFile("/etc/hosts", []byte(strings.Join(kept, "\n")), 0644)
+	os.WriteFile("/etc/hosts", []byte(strings.Join(kept, "\n")), 0644) //nosec G703 -- fixed path /etc/hosts, content is sanitized host entries
 }
 
 // ---- MCP tool handlers ----

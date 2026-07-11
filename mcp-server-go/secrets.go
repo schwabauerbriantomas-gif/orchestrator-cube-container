@@ -30,8 +30,8 @@ import (
 const (
 	// aesKeyLen is the required key length for AES-256.
 	aesKeyLen = 32
-	// defaultSecretsPath is the on-disk encrypted store location.
-	defaultSecretsPath = "/var/lib/cube-container/secrets.json"
+	// defaultSecretsPath is the on-disk encrypted store location (not a credential).
+	defaultSecretsPath = "/var/lib/cube-container/secrets.json" //nosec G101
 	// defaultKeyPath is where auto-generated keys are persisted.
 	// Separated from the secrets store directory to reduce exposure if a path
 	// traversal bug allows reading files from the store (M3).

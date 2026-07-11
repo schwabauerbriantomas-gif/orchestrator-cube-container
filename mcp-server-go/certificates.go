@@ -177,7 +177,7 @@ func (cm *CertificateManager) parseCertDir(dir, domain, issuer string) *CertInfo
 }
 
 func (cm *CertificateManager) parseCertFile(path, source string) *CertInfo {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nosec G703 -- path is from os.ReadDir on a config dir, not user input
 	if err != nil {
 		return nil
 	}

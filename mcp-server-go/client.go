@@ -80,7 +80,7 @@ func (c *CubeClient) request(method, path string, body interface{}, params url.V
 		bodyReader = bytes.NewReader(jsonBytes)
 	}
 
-	req, err := http.NewRequest(method, u, bodyReader)
+	req, err := http.NewRequest(method, u, bodyReader) //nosec G704 -- URL is built from validated CubeAPI endpoint, not user input
 	if err != nil {
 		return nil, fmt.Errorf("request creation error: %w", err)
 	}
@@ -88,7 +88,7 @@ func (c *CubeClient) request(method, path string, body interface{}, params url.V
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", c.UserAgent)
 
-	resp, err := c.HTTP.Do(req)
+	resp, err := c.HTTP.Do(req) //nosec G704 -- URL built from validated CubeAPI endpoint
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

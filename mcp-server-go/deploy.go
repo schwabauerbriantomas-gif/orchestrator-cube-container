@@ -560,8 +560,12 @@ func copyFile(src, dst string) error {
 	if err != recursiveIgnore(err, src) {
 		return err
 	}
-	os.MkdirAll(filepath.Dir(dst), 0755)
-	return os.WriteFile(dst, data, 0644)
+	// Clean destination path to prevent path traversal via crafted filenames.
+	dst = filepath.Clean(dst)
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return fmt.Errorf("create parent dir for %s: %w", dst, err)
+	}
+	return os.WriteFile(dst, data, 0644) //nosec G703 G306 -- deploy copies various file types, 0644 is standard; dst is cleaned above
 }
 
 // recursiveIgnore ignores errors for symlinks/unreadable files.

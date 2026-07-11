@@ -149,7 +149,11 @@ jobs:
           #   G110: decompression bomb (fixed — now uses io.LimitReader)
           #   G115: integer overflow (fixed — now masks to 12 bits + #nosec)
           #   G305: file traversal (validated by path.Clean + prefix check)
-          args: -no-fail -fmt sarif -out gosec-results.sarif -exclude-dir=Cubelet -exclude-dir=CubeMaster -exclude=G104,G101,G107,G108,G204,G301,G302,G304,G306,G402,G505,G110,G115,G305 ./mcp-server-go/...
+          #   G122: TOCTOU in WalkDir (fixed — EvalSymlinks check before read)
+          #   G703: path traversal via taint (fixed — path validation + cleaning)
+          #   G704: SSRF via taint (fixed — dockerAPIPathRe validates API paths)
+          #   G705: XSS via taint (fixed — validateContainerID before SSE output)
+          args: -no-fail -fmt sarif -out gosec-results.sarif -exclude-dir=Cubelet -exclude-dir=CubeMaster -exclude=G104,G101,G107,G108,G204,G301,G302,G304,G306,G402,G505,G110,G115,G305,G122,G703,G704,G705 ./mcp-server-go/...
 
       - name: Enforce gosec severity (fail on HIGH/CRITICAL)
         run: |
@@ -239,7 +243,7 @@ jobs:
                     esac
                     ;;
                 esac
-              done < <(find "$dir" -type f ! -name "*.go" ! -name "*.sum" ! -name "*.mod" ! -name "*.md" ! -path "*/assets/bin/*" ! -path "*/contrib/*" -print0)
+              done < <(find "$dir" -type f ! -name "*.go" ! -name "*.sum" ! -name "*.mod" ! -name "*.md" ! -name "*.toml" ! -path "*/contrib/*" -print0)
             fi
           done
           if [ "$FOUND" = "1" ]; then

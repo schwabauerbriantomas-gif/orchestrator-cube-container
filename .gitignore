@@ -40,6 +40,9 @@ Cubelet/cubecli
 Cubelet/testarp
 Cubelet/testtap
 CubeMaster/cube-master
+mcp-server-go/mcp-server-go
+mcp-server-go/cube-mcp
+examples/cube-bench/cube-bench
 **/bin/
 **/*.exe
 

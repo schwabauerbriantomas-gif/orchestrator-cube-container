@@ -31,7 +31,7 @@ func createTunnelTransport(fn createConnFn, proxy *url.URL) *http.Transport {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: true, //nosec G402 -- legacy tunnel transport, not used in container-mode (single-node)
 		},
 	}
 }

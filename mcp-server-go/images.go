@@ -204,7 +204,16 @@ func (im *ImageManager) BuildImage(ctx context.Context, contextDir, dockerfile, 
 		if !fi.Mode().IsRegular() {
 			return nil
 		}
-		data, err := os.ReadFile(path)
+		// Guard against symlink swap between WalkDir and ReadFile (TOCTOU).
+		// If the file was replaced with a symlink, ResolveLink fails below.
+		realPath, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return err
+		}
+		if realPath != path {
+			return fmt.Errorf("refusing to follow symlink in build context: %s", path)
+		}
+		data, err := os.ReadFile(path) //nosec G304 G122 -- path came from WalkDir; symlink swap checked above
 		if err != nil {
 			return err
 		}

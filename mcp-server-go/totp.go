@@ -138,7 +138,7 @@ func (ts *TOTPStore) HasTOTP(keyID string) bool {
 func generateTOTP(secret []byte, counter int64) int {
 	// Convert counter to 8-byte big-endian
 	var buf [8]byte
-	binary.BigEndian.PutUint64(buf[:], uint64(counter))
+	binary.BigEndian.PutUint64(buf[:], uint64(counter)) //nosec G115 -- counter is always positive in TOTP (time-based)
 
 	// HMAC-SHA1
 	mac := hmac.New(totpAlgorithm, secret)

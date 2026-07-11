@@ -67,6 +67,10 @@ func handleLogStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "container_id required: GET /streams/{container_id}/logs", http.StatusBadRequest)
 		return
 	}
+	if err := validateContainerID(containerID); err != nil {
+		http.Error(w, fmt.Sprintf("invalid container_id: %s", err), http.StatusBadRequest)
+		return
+	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -83,7 +87,7 @@ func handleLogStream(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	// Initial comment line (SSE comments start with ':') signals the stream is open.
-	fmt.Fprintf(w, ": connected container_id=%s\n\n", containerID)
+	fmt.Fprintf(w, ": connected container_id=%s\n\n", containerID) //nosec G705 -- containerID validated by validateContainerID above
 	flusher.Flush()
 
 	ctx := r.Context()
