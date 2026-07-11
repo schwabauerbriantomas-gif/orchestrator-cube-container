@@ -199,32 +199,15 @@ jobs:
         run: |
           cd mcp-server-go && go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck -format sarif ./... > ../govulncheck-raw.sarif || true
-          # Filter out module-level-only findings (level=note) where our code
-          # doesn't actually call the vulnerable symbols. govulncheck reports
-          # these for modules like x/crypto that contain deprecated packages
-          # (e.g. openpgp) even when only a safe sub-package (e.g. argon2)
-          # is imported. These have no fix version and are not exploitable.
-          python3 -c "
-          import json
-          with open('../govulncheck-raw.sarif') as f:
-              sarif = json.load(f)
-          removed = 0
-          for run in sarif.get('runs', []):
-              kept = []
-              for r in run.get('results', []):
-                  is_module_only = r.get('level') == 'note' and \
-                      'does not appear to call' in r.get('message', {}).get('text', '').lower() or \
-                      'doesn' in r.get('message', {}).get('text', '').lower() and 'call' in r.get('message', {}).get('text', '').lower()
-                  if is_module_only:
-                      removed += 1
-                      print(f'Filtered module-only finding: {r.get(\"ruleId\", \"?\")}')
-                  else:
-                      kept.append(r)
-              run['results'] = kept
-          with open('../govulncheck.sarif', 'w') as f:
-              json.dump(sarif, f, indent=2)
-          print(f'Filtered {removed} module-only finding(s). Upload-ready SARIF written.')
-          "
+          # Drop module-level-only findings (level=note, no call path).
+          # govulncheck reports these for modules like x/crypto that contain
+          # deprecated packages (e.g. openpgp) even when only a safe
+          # sub-package (e.g. argon2) is imported. No fix version exists.
+          jq '(.runs[].results |= map(select(
+            .level != "note" or (
+              (.message.text | ascii_downcase | test("call")) | not
+            )
+          )))' ../govulncheck-raw.sarif > ../govulncheck.sarif
 
       - name: Upload Gosec SARIF
         if: always() && hashFiles('gosec-results.sarif') != ''
