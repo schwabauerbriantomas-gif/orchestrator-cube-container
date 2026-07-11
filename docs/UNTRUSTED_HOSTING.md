@@ -94,10 +94,10 @@ serves as defense-in-depth for the Docker backend, where no hardware isolation e
 
 ### Why This Beats External Solutions
 
-- **No KVM setup needed** — CubeSandbox already manages it
+- **No KVM setup needed** — Cube Container already manages it
 - **<5MB overhead** vs 32-128MB for Firecracker/Kata
 - **<60ms boot** — same class as Firecracker
-- **CubeEgress proxy** — credential vault is unique to CubeSandbox
+- **CubeEgress proxy** — credential vault is unique to Cube Container
 - **CubeCoW** — snapshot/restore is near-instant
 
 ### When to Use External Solutions Instead
