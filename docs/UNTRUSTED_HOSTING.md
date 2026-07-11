@@ -18,13 +18,13 @@ Standard Docker containers share the host kernel — they rely on namespaces and
 
 ## ⭐ Recommended: Cube KVM Backend (Already Integrated)
 
-**CubeSandbox's KVM backend is the native solution — no additional software needed.**
+**Cube Container's KVM backend is the native solution — no additional software needed.**
 
 The Cube backend (`CUBE_BACKEND=cube`) creates sandboxes using KVM + rust-vmm,
 providing hardware-level isolation with sub-60ms boot times and <5MB memory
 overhead per instance. Each sandbox runs its own guest kernel.
 
-### Features Available Through MCP (129 tools)
+### Features Available Through MCP (178 tools)
 
 | Feature | Tool | What It Does |
 |---------|------|-------------|

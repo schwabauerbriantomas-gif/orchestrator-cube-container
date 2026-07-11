@@ -1,6 +1,6 @@
 # Contributing to Cube Container
 
-Cube Container is a container-mode fork of [CubeSandbox](https://github.com/TencentCloud/CubeSandbox), focused on MCP-native container orchestration for edge nodes.
+Cube Container is a container-mode orchestration platform controlled entirely through MCP (Model Context Protocol).
 
 ## Quick Start
 
@@ -156,7 +156,7 @@ go build ./... && go vet ./... && staticcheck ./... && go test -race -count=1 ./
 | Benchmarks | `go test -tags=e2e -bench=. -benchmem` | Performance metrics |
 | Staticcheck | `staticcheck ./...` | Dead code, style, correctness (must be 0 findings) |
 
-**CI gates**: build, `go vet`, `gosec`, `govulncheck`, staticcheck, and a tool-count
+**CI gates**: build, `go vet`, `gosec` (SARIF — 0 HIGH/CRITICAL), `govulncheck` (0 vulns), binary guard, and a tool-count
 check (`grep -c 'registerTool(s,' tools_registration.go` must match README).
 
 ## Backend Auto-Detection
@@ -220,9 +220,9 @@ Before adding any tool that accepts user input, consult the security checklist i
 - **Inter-node Docker** connections should use `CUBE_DOCKER_TLS=true` in production (AS-4)
 - **Audit trail** uses HMAC-SHA256 keyed with `CUBE_SECRETS_KEY` (AS-7)
 
-56 security issues have been identified and fixed across 7 audit rounds. See
+131 security findings have been identified across 11 audit rounds (111 fixed, 20 deferred). See
 [README.md](README.md#security) for the full audit history.
 
 ## License
 
-Apache 2.0 (inherited from upstream CubeSandbox). See [LICENSE](LICENSE).
+Apache 2.0. See [LICENSE](LICENSE).

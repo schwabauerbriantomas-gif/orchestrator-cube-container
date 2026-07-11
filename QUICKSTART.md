@@ -237,4 +237,4 @@ cd mcp-server-go && go test -v -race ./...
 
 ---
 
-*Cube Container v0.9.0-beta — see RELEASE_NOTES.md for changelog*
+*Cube Container v0.10.0-beta — see RELEASE_NOTES.md for changelog*

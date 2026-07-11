@@ -13,7 +13,7 @@ assignees: ""
 
 ## Environment
 
-- CubeSandbox version / commit:
+- Cube Container version / commit:
 - Host OS and kernel version:
 - KVM info (`modinfo kvm`):
 - Deployment mode: <!-- single-node / cluster -->

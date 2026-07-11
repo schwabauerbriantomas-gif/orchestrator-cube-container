@@ -7,7 +7,7 @@ assignees: ""
 ---
 
 <!--
-Good First Issue Template for CubeSandbox
+Good First Issue Template for Cube Container
 This template is for tasks that are well-scoped, clearly defined, and suitable for
 contributors who are new to the project.
 
@@ -87,7 +87,7 @@ Tips for filling out this template:
 <!-- Link to or summarize the steps needed to build and test the relevant component.
      This is critical for first-time contributors. -->
 
-See the [Getting Started guide](../../docs/guide/quickstart.md) and [CONTRIBUTING.md](../../CONTRIBUTING.md).
+See the [Quick Start Guide](../../QUICKSTART.md) and [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 For this specific task, you will primarily need to build/run:
 - [ ] `make <component>` — <!-- e.g., `make cubelet` -->
@@ -97,7 +97,7 @@ For this specific task, you will primarily need to build/run:
 
 <!-- Links to relevant documentation, RFCs, Linux man pages, upstream issues, etc. -->
 
-- [CubeSandbox Architecture Overview](../../docs/architecture/overview.md)
+- [Cube Container Architecture](../../mcp-server-go/ARCHITECTURE.md)
 - ...
 
 ## Mentorship

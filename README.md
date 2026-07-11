@@ -406,7 +406,7 @@ REST API client for Proxmox VE. API token auth, TLS on by default, RBAC viewer/o
 
 ### Audit History
 
-91 security issues identified and fixed across 9 audit rounds (121 total findings, 30 deferred):
+129 security findings identified across 10 audit rounds (109 fixed, 20 deferred with documented justification):
 
 | Round | Scope | Total | Fixed | Deferred |
 |-------|-------|-------|-------|----------|
@@ -419,7 +419,8 @@ REST API client for Proxmox VE. API token auth, TLS on by default, RBAC viewer/o
 | R9-Hyp | Hypervisor (temp files, ZFS validation, VNC, cloud-init) | 10 | 5 | 5 |
 | R9-MCP | MCP protocol (SSRF, metrics injection, secret leaks) | 12 | 6 | 6 |
 | R10-Sec | Security audit (logstream XSS, SSRF, TOCTOU, path traversal) | 9 | 9 | 0 |
-| **Total** | | **129** | **109** | **20** |
+| R11-Sec | Response body limits, version bump to v0.10.0-beta | 2 | 2 | 0 |
+| **Total** | | **131** | **111** | **20** |
 
 Round 5 (Attack Surface Audit) findings:
 
@@ -624,8 +625,9 @@ mcp-server-go/
 |----------|---------|
 | [ARCHITECTURE.md](mcp-server-go/ARCHITECTURE.md) | Code map — file categories, patterns, data flow, how to add features |
 | [AGENT_GUIDE.md](mcp-server-go/AGENT_GUIDE.md) | Conventions, checklists, common mistakes, security checklist |
-| [skills/](skills/) | 8 workflow skills teaching the AI model correct tool sequences |
+| [skills/](skills/) | 9 workflow skills teaching the AI model correct tool sequences |
 | [docs/UNTRUSTED_HOSTING.md](docs/UNTRUSTED_HOSTING.md) | Isolation options for hosting third-party/untrusted code |
+| [docs/audits/](docs/audits/) | Security audit reports (R1–R11) |
 
 ### Skills (AI Workflow Playbooks)
 
@@ -651,7 +653,7 @@ The `skills/` directory contains playbooks that teach the AI model how to chain 
 - [x] ~~SSRF prevention on health probes~~ — `isPrivateHost()` blocks RFC 1918, loopback, link-local, cloud metadata (R9-MCP-04)
 - [x] ~~HA heartbeat replay protection~~ — timestamp validation + monotonic counter (R9-AUTH-01)
 - [x] ~~R10 security audit~~ — logstream XSS, SSRF via Docker API paths, TOCTOU in WalkDir, path traversal in deploy, SSH hostname injection, response body limits (9 findings fixed)
-- [x] ~~gosec SARIF enforcement in CI~~ — 14 exclusiones documentadas, 2 fixes (G110, G115)
+- [x] ~~gosec SARIF enforcement in CI~~ — 14 documented exclusions, 2 fixes (G110, G115)
 - [ ] Hardened container defaults (seccomp + AppArmor + cap-drop)
 - [ ] `--runtime` parameter for gVisor/Kata/Firecracker support
 - [ ] `CUBE_SECURE_RUNTIME` env var for node-level isolation default
