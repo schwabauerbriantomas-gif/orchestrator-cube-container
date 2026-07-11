@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -12,6 +13,18 @@ import (
 	"regexp"
 	"strings"
 )
+
+// maxHTTPReadBytes limits how much we read from HTTP response bodies
+// (Docker API, CubeAPI, Proxmox). Prevents memory exhaustion from
+// oversized or malicious responses.
+const maxHTTPReadBytes = 50 << 20 // 50MB
+
+// limitedReadAll reads from r up to maxHTTPReadBytes, returning an error
+// if the limit is exceeded. This prevents memory exhaustion when reading
+// HTTP response bodies from backend services.
+func limitedReadAll(r io.Reader) ([]byte, error) {
+	return io.ReadAll(io.LimitReader(r, maxHTTPReadBytes))
+}
 
 var safeNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 

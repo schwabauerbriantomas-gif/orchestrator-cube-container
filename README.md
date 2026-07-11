@@ -3,7 +3,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
 [![MCP Server](https://img.shields.io/badge/MCP-178%20tools-orange)](https://modelcontextprotocol.io)
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8)](https://go.dev)
-[![Security Audit](https://img.shields.io/badge/Security-91%20issues%20fixed-red)](#security)
+[![Security Audit](https://img.shields.io/badge/Security-100%2B%20issues%20fixed-red)](#security)
 [![Tests](https://img.shields.io/badge/Tests-66%20passing-brightgreen)](#testing)
 
 A container orchestration platform controlled by AI through the Model Context Protocol. An MCP server that replaces the DevOps role — the operations interface is natural language, not YAML.
@@ -418,7 +418,8 @@ REST API client for Proxmox VE. API token auth, TLS on by default, RBAC viewer/o
 | R9-Auth | Auth/crypto (heartbeat replay, webhook, HMAC, dead code) | 14 | 5 | 9 |
 | R9-Hyp | Hypervisor (temp files, ZFS validation, VNC, cloud-init) | 10 | 5 | 5 |
 | R9-MCP | MCP protocol (SSRF, metrics injection, secret leaks) | 12 | 6 | 6 |
-| **Total** | | **120** | **100** | **20** |
+| R10-Sec | Security audit (logstream XSS, SSRF, TOCTOU, path traversal) | 9 | 9 | 0 |
+| **Total** | | **129** | **109** | **20** |
 
 Round 5 (Attack Surface Audit) findings:
 
@@ -649,6 +650,7 @@ The `skills/` directory contains playbooks that teach the AI model how to chain 
 - [x] ~~TOTP 2FA (RFC 6238, Steam Guard style)~~ — implemented in v0.9.0-beta
 - [x] ~~SSRF prevention on health probes~~ — `isPrivateHost()` blocks RFC 1918, loopback, link-local, cloud metadata (R9-MCP-04)
 - [x] ~~HA heartbeat replay protection~~ — timestamp validation + monotonic counter (R9-AUTH-01)
+- [x] ~~R10 security audit~~ — logstream XSS, SSRF via Docker API paths, TOCTOU in WalkDir, path traversal in deploy, SSH hostname injection, response body limits (9 findings fixed)
 - [x] ~~gosec SARIF enforcement in CI~~ — 14 exclusiones documentadas, 2 fixes (G110, G115)
 - [ ] Hardened container defaults (seccomp + AppArmor + cap-drop)
 - [ ] `--runtime` parameter for gVisor/Kata/Firecracker support

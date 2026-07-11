@@ -95,7 +95,7 @@ func (c *ProxmoxClient) do(method, path string, params url.Values) ([]byte, int,
 	}
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := limitedReadAll(resp.Body)
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
 	}

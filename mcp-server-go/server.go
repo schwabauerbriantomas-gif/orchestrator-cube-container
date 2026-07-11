@@ -31,7 +31,7 @@ var (
 	metricsCollector *MetricsCollector
 	routeMgr        *RouteManager
 	netMgr          *NetworkManager
-	version         = "1.0.0"
+	version         = "0.10.0-beta"
 )
 
 func main() {

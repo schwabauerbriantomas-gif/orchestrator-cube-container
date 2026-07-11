@@ -132,7 +132,7 @@ func (c *DockerClient) dockerRequest(ctx context.Context, method, path string, b
 	}
 	defer resp.Body.Close()
 
-	data, _ := io.ReadAll(resp.Body)
+	data, _ := limitedReadAll(resp.Body)
 	return resp.StatusCode, data, nil
 }
 

@@ -254,7 +254,7 @@ func (im *ImageManager) BuildImage(ctx context.Context, contextDir, dockerfile, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := limitedReadAll(resp.Body)
 		return nil, fmt.Errorf("build failed (HTTP %d): %s", resp.StatusCode, string(respBody))
 	}
 
@@ -333,7 +333,7 @@ func (im *ImageManager) PushImage(ctx context.Context, tag, registry string) (*I
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := limitedReadAll(resp.Body)
 		return nil, fmt.Errorf("push failed (HTTP %d): %s", resp.StatusCode, string(respBody))
 	}
 
@@ -393,7 +393,7 @@ func (im *ImageManager) PullImage(ctx context.Context, tag string) (*ImagePullRe
 	defer resp.Body.Close()
 
 	if resp.StatusCode > 299 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := limitedReadAll(resp.Body)
 		return nil, fmt.Errorf("pull failed (HTTP %d): %s", resp.StatusCode, string(respBody))
 	}
 

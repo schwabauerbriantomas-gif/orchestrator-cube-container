@@ -935,7 +935,7 @@ func (a *AuthAdminAPI) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		Role  string `json:"role"`
 		Label string `json:"label"`
 	}
-	body, _ := io.ReadAll(r.Body)
+	body, _ := limitedReadAll(r.Body)
 	json.Unmarshal(body, &req)
 
 	role := Role(req.Role)

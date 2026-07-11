@@ -94,7 +94,7 @@ func (c *CubeClient) request(method, path string, body interface{}, params url.V
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := limitedReadAll(resp.Body)
 
 	if resp.StatusCode >= 400 {
 		return nil, &CubeAPIError{Status: resp.StatusCode, Detail: string(respBody)}
