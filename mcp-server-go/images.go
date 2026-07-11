@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -213,7 +214,14 @@ func (im *ImageManager) BuildImage(ctx context.Context, contextDir, dockerfile, 
 		if realPath != path {
 			return fmt.Errorf("refusing to follow symlink in build context: %s", path)
 		}
-		data, err := os.ReadFile(path) //nosec G304 G122 -- path came from WalkDir; symlink swap checked above
+		// R12-3: Open with O_NOFOLLOW via syscall to atomically reject symlinks.
+		fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW, 0) //nosec G304 G122 -- path from WalkDir + O_NOFOLLOW
+		if err != nil {
+			return err
+		}
+		f := os.NewFile(uintptr(fd), path)
+		data, err := io.ReadAll(f)
+		f.Close()
 		if err != nil {
 			return err
 		}

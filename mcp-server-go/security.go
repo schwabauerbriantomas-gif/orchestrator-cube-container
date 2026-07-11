@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -496,30 +497,38 @@ func validateMountPath(path string) error {
 
 // validateWebhookURL ensures a webhook URL points to a safe destination.
 // Blocks private/internal hosts to prevent SSRF (H6).
-func validateWebhookURL(url string) error {
-	url = strings.TrimSpace(url)
-	if url == "" {
+// R12-2: Also resolves DNS and checks resolved IPs — prevents DNS rebinding
+// attacks where a hostname resolves to an internal IP (e.g. 169.254.169.254).
+func validateWebhookURL(rawURL string) error {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
 		return fmt.Errorf("webhook URL cannot be empty")
 	}
-	if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
+	if !strings.HasPrefix(rawURL, "https://") && !strings.HasPrefix(rawURL, "http://") {
 		return fmt.Errorf("webhook URL must start with http:// or https://")
 	}
-	// Extract host
-	var hostPart string
-	if strings.HasPrefix(url, "https://") {
-		hostPart = url[8:]
-	} else {
-		hostPart = url[7:]
+	// Parse with net/url for robust host extraction
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid webhook URL: %w", err)
 	}
-	// Strip path
-	if idx := strings.Index(hostPart, "/"); idx >= 0 {
-		hostPart = hostPart[:idx]
-	}
-	// Strip port
-	host := strings.SplitN(hostPart, ":", 2)[0]
-	// SSRF protection: block private/internal/cloud-metadata hosts
+	host := parsed.Hostname()
+	// SSRF protection: block private/internal/cloud-metadata hosts (literal IP check)
 	if isPrivateHost(host) {
 		return fmt.Errorf("webhook URL points to private/internal host '%s' — SSRF protection blocks this", host)
+	}
+	// R12-2: Resolve DNS and verify no resolved IP is private/internal.
+	// This prevents DNS rebinding: a public hostname that resolves to 169.254.169.254.
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		// If we can't resolve, allow it — the HTTP client will fail on connect.
+		// This is safer than blocking legitimate hostnames with transient DNS issues.
+		return nil
+	}
+	for _, ip := range ips {
+		if isPrivateIP(ip) {
+			return fmt.Errorf("webhook URL host '%s' resolves to private IP '%s' — SSRF protection blocks this", host, ip.String())
+		}
 	}
 	return nil
 }

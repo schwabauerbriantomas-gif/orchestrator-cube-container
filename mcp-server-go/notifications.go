@@ -245,6 +245,11 @@ func (nm *NotificationManager) sendWebhook(ch *NotificationChannel, msg Notifica
 		return err
 	}
 
+	// R12-1: Validate URL at execution time, not just at registration.
+	// AddChannel validates, but loadFromEnv and update_channel bypass it.
+	if err := validateWebhookURL(ch.WebhookURL); err != nil {
+		return fmt.Errorf("webhook URL rejected: %w", err)
+	}
 	resp, err := http.Post(ch.WebhookURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("webhook request failed: %w", err)

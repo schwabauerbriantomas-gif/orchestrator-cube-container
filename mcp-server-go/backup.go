@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -526,10 +527,12 @@ func (bm *BackupManager) tarGzDirectory(src, dst, prefix string) (*tarResult, er
 		if realPath != path {
 			return nil
 		}
-		data, err := os.Open(path) //nosec G304 G122 -- path came from WalkDir; symlink swap checked above
+		// R12-3: Open with O_NOFOLLOW via syscall to atomically reject symlinks.
+		fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW, 0) //nosec G304 G122 -- path from WalkDir + O_NOFOLLOW
 		if err != nil {
 			return nil
 		}
+		data := os.NewFile(uintptr(fd), path)
 		n, _ := io.Copy(tw, data)
 		data.Close()
 		totalSize += n
