@@ -20,7 +20,7 @@ done
 echo `date`": kill ret:$ret"
 
 
-# 检查进程优雅停止
+# Check graceful process shutdown
 timer=15
 while [[ true ]]; do
 pidof ${BIN}
@@ -31,7 +31,7 @@ pidof ${BIN}
     else
         echo -e "\033[32m service stopped. \033[0m"
 		exit 0
-		# 预留5s缓冲用于调试使用过程中观察日志和进程等
+		# 5s buffer for debugging (log/process inspection)
 		sleep 5
 		break
     fi

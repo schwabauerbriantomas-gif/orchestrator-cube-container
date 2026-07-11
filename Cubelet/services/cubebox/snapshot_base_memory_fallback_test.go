@@ -34,7 +34,7 @@ func TestErrNoBaseMemoryForIncrementalIsSentinel(t *testing.T) {
 // TestResolveBaseSnapshotIDFollowsCommitChain is the regression test for the
 // rollback scenario:
 //
-//	VM 从 T 启动 -> commit A -> commit B -> rollback to A -> commit C
+//	VM starts from T -> commit A -> commit B -> rollback to A -> commit C
 //
 // In the old code path CommitSandbox never updated cb.Labels, so
 // resolveBaseSnapshotID always returned T. That happened to be safe with

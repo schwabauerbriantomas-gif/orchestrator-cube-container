@@ -207,7 +207,7 @@ func (overhead *OverheadConfig) MatchVMSnapshotSpec(ctx context.Context, req cub
 		}
 	}
 
-	log.G(ctx).Errorf("no vm snapshot spec matched vmCPU: %v,memReq:%v, pmemPage: %v, 冷启动规格 :%v", vmCPU, memReq, pmemPage, vmMem)
+	log.G(ctx).Errorf("no vm snapshot spec matched vmCPU: %v, memReq: %v, pmemPage: %v, cold start spec: %v", vmCPU, memReq, pmemPage, vmMem)
 	vmResource = CubeVMMResource{
 		CPU:    vmCPU,
 		Memory: vmMem,

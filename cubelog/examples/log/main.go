@@ -46,7 +46,7 @@ func main() {
 
 	cubelog.EnableLogMetric()
 
-	logPath := "/data/组件名/log"
+	logPath := "/data/component-name/log"
 
 	cubelog.Create(logPath)
 

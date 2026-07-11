@@ -421,7 +421,7 @@ func TestBoltCacheStoreWithIndexers(t *testing.T) {
 		}
 	}
 
-	t.Logf("✓ Multi-index test passed: found %d items with value index '0'", len(indexedItems))
+	t.Logf("Multi-index test passed: found %d items with value index '0'", len(indexedItems))
 }
 
 func TestBoltCacheStoreIndexerUpdate(t *testing.T) {
@@ -485,7 +485,7 @@ func TestBoltCacheStoreIndexerUpdate(t *testing.T) {
 		t.Fatalf("expected 1 item with new value index '7', got %d", len(newItems))
 	}
 
-	t.Logf("✓ Indexer update test passed")
+	t.Logf("Indexer update test passed")
 }
 
 func TestBoltCacheStoreMultipleIndexers(t *testing.T) {
@@ -572,7 +572,7 @@ func TestBoltCacheStoreMultipleIndexers(t *testing.T) {
 		}
 	}
 
-	t.Logf("✓ Multiple indexers test passed")
+	t.Logf("Multiple indexers test passed")
 }
 
 func TestBoltCacheStoreIndexerWithDelete(t *testing.T) {
@@ -634,7 +634,7 @@ func TestBoltCacheStoreIndexerWithDelete(t *testing.T) {
 		t.Fatalf("expected 2 items after delete, got %d", len(items))
 	}
 
-	t.Logf("✓ Indexer delete test passed")
+	t.Logf("Indexer delete test passed")
 }
 
 func TestBoltCacheStoreGenericMethods(t *testing.T) {
@@ -689,7 +689,7 @@ func TestBoltCacheStoreGenericMethods(t *testing.T) {
 				t.Fatalf("invalid object in list")
 			}
 		}
-		t.Logf("✓ ListGeneric returned %d items with correct type", len(items))
+		t.Logf("ListGeneric returned %d items with correct type", len(items))
 	})
 
 	t.Run("ByIndexGeneric", func(t *testing.T) {
@@ -706,7 +706,7 @@ func TestBoltCacheStoreGenericMethods(t *testing.T) {
 				t.Fatalf("invalid item in index result: Value=%d, Value%%10=%d", item.Value, item.Value%10)
 			}
 		}
-		t.Logf("✓ ByIndexGeneric returned correct items with type safety")
+		t.Logf("ByIndexGeneric returned correct items with type safety")
 	})
 
 	t.Run("ListKeysGeneric", func(t *testing.T) {
@@ -717,7 +717,7 @@ func TestBoltCacheStoreGenericMethods(t *testing.T) {
 		if len(keys) != 3 {
 			t.Fatalf("expected 3 keys, got %d", len(keys))
 		}
-		t.Logf("✓ ListKeysGeneric returned %d keys", len(keys))
+		t.Logf("ListKeysGeneric returned %d keys", len(keys))
 	})
 
 	t.Run("ListIndexFuncValuesGeneric", func(t *testing.T) {
@@ -728,7 +728,7 @@ func TestBoltCacheStoreGenericMethods(t *testing.T) {
 		if len(values) == 0 {
 			t.Fatalf("expected non-empty index values")
 		}
-		t.Logf("✓ ListIndexFuncValuesGeneric returned %d values", len(values))
+		t.Logf("ListIndexFuncValuesGeneric returned %d values", len(values))
 	})
 
 	t.Run("IndexKeysGeneric", func(t *testing.T) {
@@ -739,7 +739,7 @@ func TestBoltCacheStoreGenericMethods(t *testing.T) {
 		if len(keys) != 2 {
 			t.Fatalf("expected 2 keys for value==2, got %d", len(keys))
 		}
-		t.Logf("✓ IndexKeysGeneric returned %d keys", len(keys))
+		t.Logf("IndexKeysGeneric returned %d keys", len(keys))
 	})
 
 	t.Run("IndexGeneric", func(t *testing.T) {
@@ -751,10 +751,10 @@ func TestBoltCacheStoreGenericMethods(t *testing.T) {
 		if len(items) != 2 {
 			t.Fatalf("expected 2 items with value%%10==2, got %d", len(items))
 		}
-		t.Logf("✓ IndexGeneric returned correct items with type safety")
+		t.Logf("IndexGeneric returned correct items with type safety")
 	})
 
-	t.Logf("✓ All generic methods tests passed")
+	t.Logf("All generic methods tests passed")
 }
 
 func TestBoltCacheStoreTypeNameExtraction(t *testing.T) {
@@ -769,7 +769,7 @@ func TestBoltCacheStoreTypeNameExtraction(t *testing.T) {
 		return "key", nil
 	}
 
-	t.Run("非指针类型", func(t *testing.T) {
+	t.Run("non-pointer type", func(t *testing.T) {
 
 		store, err := NewBoltCacheStore(db, keyFunc, cache.Indexers{}, TestObject{})
 		if err != nil {
@@ -779,10 +779,10 @@ func TestBoltCacheStoreTypeNameExtraction(t *testing.T) {
 		if store.bucketName != expected {
 			t.Errorf("expected bucket name %s, got %s", expected, store.bucketName)
 		}
-		t.Logf("✓ Non-pointer type bucket name: %s", store.bucketName)
+		t.Logf("Non-pointer type bucket name: %s", store.bucketName)
 	})
 
-	t.Run("指针类型", func(t *testing.T) {
+	t.Run("pointer type", func(t *testing.T) {
 
 		store, err := NewBoltCacheStore(db, keyFunc, cache.Indexers{}, &TestObject{})
 		if err != nil {
@@ -792,10 +792,10 @@ func TestBoltCacheStoreTypeNameExtraction(t *testing.T) {
 		if store.bucketName != expected {
 			t.Errorf("expected bucket name %s, got %s", expected, store.bucketName)
 		}
-		t.Logf("✓ Pointer type bucket name: %s", store.bucketName)
+		t.Logf("Pointer type bucket name: %s", store.bucketName)
 	})
 
-	t.Run("类型反射验证", func(t *testing.T) {
+	t.Run("type reflection verification", func(t *testing.T) {
 
 		objPtr := &TestObject{}
 		reflectType := reflect.TypeOf(objPtr)
@@ -808,6 +808,6 @@ func TestBoltCacheStoreTypeNameExtraction(t *testing.T) {
 			t.Errorf("pointer Elem().Name() should be TestObject, got %s", reflectType.Elem().Name())
 		}
 
-		t.Logf("✓ Type reflection verified: pointer Name() = \"%s\", Elem().Name() = \"%s\"", reflectType.Name(), reflectType.Elem().Name())
+		t.Logf("Type reflection verified: pointer Name() = \"%s\", Elem().Name() = \"%s\"", reflectType.Name(), reflectType.Elem().Name())
 	})
 }

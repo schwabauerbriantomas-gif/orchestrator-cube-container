@@ -45,7 +45,7 @@ func TestGetHealthyNodesByInstanceType(t *testing.T) {
 		want node.NodeList
 	}{
 		{
-			name: "产品类型不存在",
+			name: "product type does not exist",
 			prepare: func() {
 				l.sortedNodesByClusters = map[string]node.NodeList{
 					"other": createNodes(3, true),
@@ -59,7 +59,7 @@ func TestGetHealthyNodesByInstanceType(t *testing.T) {
 			want: node.NodeList{},
 		},
 		{
-			name: "n=-1 返回全部节点",
+			name: "n=-1 returns all nodes",
 			prepare: func() {
 				l.sortedNodesByClusters = map[string]node.NodeList{
 					"valid": createNodes(5, true),
@@ -72,7 +72,7 @@ func TestGetHealthyNodesByInstanceType(t *testing.T) {
 			want: createNodes(5, true),
 		},
 		{
-			name: "n=0 返回空列表",
+			name: "n=0 returns empty list",
 			prepare: func() {
 				l.sortedNodesByClusters = map[string]node.NodeList{
 					"valid": createNodes(5, true),
@@ -85,7 +85,7 @@ func TestGetHealthyNodesByInstanceType(t *testing.T) {
 			want: node.NodeList{},
 		},
 		{
-			name: "健康节点不足",
+			name: "insufficient healthy nodes",
 			prepare: func() {
 				l.sortedNodesByClusters = map[string]node.NodeList{
 					"valid": append(createNodes(2, true), createNodes(3, false)...),
@@ -98,7 +98,7 @@ func TestGetHealthyNodesByInstanceType(t *testing.T) {
 			want: createNodes(2, true),
 		},
 		{
-			name: "健康节点足够",
+			name: "sufficient healthy nodes",
 			prepare: func() {
 				l.sortedNodesByClusters = map[string]node.NodeList{
 					"valid": append(createNodes(5, true), createNodes(2, false)...),
@@ -111,7 +111,7 @@ func TestGetHealthyNodesByInstanceType(t *testing.T) {
 			want: createNodes(3, true),
 		},
 		{
-			name: "节点列表为空",
+			name: "node list is empty",
 			prepare: func() {
 				l.sortedNodesByClusters = map[string]node.NodeList{
 					"empty": {},
@@ -124,7 +124,7 @@ func TestGetHealthyNodesByInstanceType(t *testing.T) {
 			want: node.NodeList{},
 		},
 		{
-			name: "n为负数(非-1)",
+			name: "n is negative (not -1)",
 			prepare: func() {
 				l.sortedNodesByClusters = map[string]node.NodeList{
 					"valid": append(createNodes(3, true), createNodes(2, false)...),
@@ -145,12 +145,12 @@ func TestGetHealthyNodesByInstanceType(t *testing.T) {
 			got := GetHealthyNodesByInstanceType(tt.args.n, tt.args.product)
 
 			if len(got) != len(tt.want) {
-				t.Fatalf("长度不符: got %d, want %d", len(got), len(tt.want))
+				t.Fatalf("length mismatch: got %d, want %d", len(got), len(tt.want))
 			}
 
 			for i := 0; i < len(got); i++ {
 				if got[i].Healthy != tt.want[i].Healthy {
-					t.Errorf("节点健康状态错误: got %v, want %v", got[i].Healthy, tt.want[i].Healthy)
+					t.Errorf("node health status mismatch: got %v, want %v", got[i].Healthy, tt.want[i].Healthy)
 				}
 			}
 		})

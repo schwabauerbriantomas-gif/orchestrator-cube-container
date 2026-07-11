@@ -18,7 +18,7 @@ import (
 )
 
 func TestNewImageScore(t *testing.T) {
-	t.Run("正常创建imageScore实例", func(t *testing.T) {
+	t.Run("successfully create imageScore instance", func(t *testing.T) {
 
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		defer func() {
@@ -39,7 +39,7 @@ func TestNewImageScore(t *testing.T) {
 		assert.False(t, score.Disable())
 	})
 
-	t.Run("配置为空时panic", func(t *testing.T) {
+	t.Run("panics when config is nil", func(t *testing.T) {
 
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		defer func() {
@@ -55,7 +55,7 @@ func TestNewImageScore(t *testing.T) {
 }
 
 func TestGetImageScoreTotalWeight(t *testing.T) {
-	t.Run("配置为空时返回错误", func(t *testing.T) {
+	t.Run("returns error when config is nil", func(t *testing.T) {
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		defer func() {
 			config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore = originalConfig
@@ -68,7 +68,7 @@ func TestGetImageScoreTotalWeight(t *testing.T) {
 		assert.Equal(t, 0.0, weight)
 	})
 
-	t.Run("正常计算总权重", func(t *testing.T) {
+	t.Run("calculate total weight normally", func(t *testing.T) {
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		originalWeights := config.GetConfig().Scheduler.Score.ResourceWeights
 		defer func() {
@@ -97,7 +97,7 @@ func TestGetImageWeightedAverageScore(t *testing.T) {
 
 	localcache.Init(ctx)
 
-	t.Run("配置为空时返回0", func(t *testing.T) {
+	t.Run("returns 0 when config is nil", func(t *testing.T) {
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		defer func() {
 			config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore = originalConfig
@@ -109,7 +109,7 @@ func TestGetImageWeightedAverageScore(t *testing.T) {
 		assert.Equal(t, 0.0, score)
 	})
 
-	t.Run("只启用image_id权重因子", func(t *testing.T) {
+	t.Run("only image_id weight factor enabled", func(t *testing.T) {
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		originalWeights := config.GetConfig().Scheduler.Score.ResourceWeights
 		defer func() {
@@ -141,12 +141,12 @@ func TestGetImageScore(t *testing.T) {
 	defer cancel()
 
 	localcache.Init(ctx)
-	t.Run("空参数返回0", func(t *testing.T) {
+	t.Run("returns 0 for nil parameters", func(t *testing.T) {
 		score := getImageScore(ctx, nil, nil)
 		assert.Equal(t, 0.0, score)
 	})
 
-	t.Run("正常计算镜像分数", func(t *testing.T) {
+	t.Run("calculate image score normally", func(t *testing.T) {
 		images := []*selctx.ImageSpec{
 			{ImageID: "nginx:latest"},
 			{ImageID: "redis:latest"},
@@ -163,12 +163,12 @@ func TestGetTemplateScore(t *testing.T) {
 	defer cancel()
 
 	localcache.Init(ctx)
-	t.Run("空参数返回0", func(t *testing.T) {
+	t.Run("returns 0 for nil parameters", func(t *testing.T) {
 		score := getTemplateScore(ctx, "", nil)
 		assert.Equal(t, 0.0, score)
 	})
 
-	t.Run("正常计算模板分数", func(t *testing.T) {
+	t.Run("calculate template score normally", func(t *testing.T) {
 		templateID := "template-123"
 		nodeInfo := &node.Node{}
 
@@ -185,25 +185,25 @@ func TestCalculatePriority(t *testing.T) {
 		expectedScore int64
 	}{
 		{
-			name:          "分数低于最小值时使用最小值",
+			name:          "score below minimum uses minimum value",
 			sumScores:     10 * 1024 * 1024,
 			numContainers: 1,
 			expectedScore: 0,
 		},
 		{
-			name:          "分数在范围内时正常计算",
+			name:          "score within range calculates normally",
 			sumScores:     500 * 1024 * 1024,
 			numContainers: 1,
 			expectedScore: fwk.MaxNodeScore * (500*1024*1024 - minThreshold) / (maxContainerThreshold - minThreshold),
 		},
 		{
-			name:          "分数超过最大值时使用最大值",
+			name:          "score exceeds maximum uses maximum value",
 			sumScores:     2000 * 1024 * 1024,
 			numContainers: 1,
 			expectedScore: fwk.MaxNodeScore,
 		},
 		{
-			name:          "多容器时调整最大阈值",
+			name:          "multiple containers adjusts max threshold",
 			sumScores:     500 * 1024 * 1024,
 			numContainers: 2,
 			expectedScore: fwk.MaxNodeScore * (500*1024*1024 - minThreshold) / (2*maxContainerThreshold - minThreshold),
@@ -223,7 +223,7 @@ func TestSumImageScores(t *testing.T) {
 	defer cancel()
 
 	localcache.Init(ctx)
-	t.Run("镜像状态为空时返回0", func(t *testing.T) {
+	t.Run("returns 0 when image state is empty", func(t *testing.T) {
 		nodeInfo := &node.Node{}
 		images := []*selctx.ImageSpec{
 			{ImageID: "nginx:latest"},
@@ -234,7 +234,7 @@ func TestSumImageScores(t *testing.T) {
 		assert.Equal(t, int64(0), sum)
 	})
 
-	t.Run("空镜像列表返回0", func(t *testing.T) {
+	t.Run("returns 0 for empty image list", func(t *testing.T) {
 		nodeInfo := &node.Node{}
 		var images []*selctx.ImageSpec
 
@@ -248,7 +248,7 @@ func TestSumTemplateScores(t *testing.T) {
 	defer cancel()
 
 	localcache.Init(ctx)
-	t.Run("模板状态为空时返回0", func(t *testing.T) {
+	t.Run("returns 0 when template state is empty", func(t *testing.T) {
 		nodeInfo := &node.Node{}
 		templateID := "template-123"
 
@@ -256,7 +256,7 @@ func TestSumTemplateScores(t *testing.T) {
 		assert.Equal(t, int64(0), sum)
 	})
 
-	t.Run("空模板ID返回0", func(t *testing.T) {
+	t.Run("returns 0 for empty template ID", func(t *testing.T) {
 		nodeInfo := &node.Node{}
 		templateID := ""
 
@@ -271,7 +271,7 @@ func TestImageScoreSelect(t *testing.T) {
 
 	localcache.Init(ctx)
 
-	t.Run("空亲和性配置返回空节点列表", func(t *testing.T) {
+	t.Run("empty affinity config returns empty node list", func(t *testing.T) {
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		defer func() {
 			config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore = originalConfig
@@ -294,7 +294,7 @@ func TestImageScoreSelect(t *testing.T) {
 		assert.Empty(t, nodes)
 	})
 
-	t.Run("panic恢复测试", func(t *testing.T) {
+	t.Run("panic recovery test", func(t *testing.T) {
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		defer func() {
 			config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore = originalConfig
@@ -318,7 +318,7 @@ func TestImageScoreSelect(t *testing.T) {
 		assert.Empty(t, nodes)
 	})
 
-	t.Run("正常计算节点分数 - 镜像亲和性", func(t *testing.T) {
+	t.Run("calculate node score normally - image affinity", func(t *testing.T) {
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		originalWeights := config.GetConfig().Scheduler.Score.ResourceWeights
 		defer func() {
@@ -369,7 +369,7 @@ func TestImageScoreSelect(t *testing.T) {
 		}
 	})
 
-	t.Run("正常计算节点分数 - 模板亲和性", func(t *testing.T) {
+	t.Run("calculate node score normally - template affinity", func(t *testing.T) {
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		originalWeights := config.GetConfig().Scheduler.Score.ResourceWeights
 		defer func() {
@@ -412,7 +412,7 @@ func TestImageScoreSelect(t *testing.T) {
 		assert.Equal(t, 0.0, nodeScore.Score)
 	})
 
-	t.Run("多权重因子组合计算", func(t *testing.T) {
+	t.Run("combined multi-weight factor calculation", func(t *testing.T) {
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		originalWeights := config.GetConfig().Scheduler.Score.ResourceWeights
 		defer func() {
@@ -459,7 +459,7 @@ func TestImageScoreSelect(t *testing.T) {
 		assert.Equal(t, 0.0, nodeScore.Score)
 	})
 
-	t.Run("禁用imageScore时返回空列表", func(t *testing.T) {
+	t.Run("returns empty list when imageScore is disabled", func(t *testing.T) {
 		originalConfig := config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore
 		defer func() {
 			config.GetConfig().Scheduler.Score.ScorePluginConf.ImageScore = originalConfig

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-// Package utils 工具类
+// Package utils provides utility functions
 package utils
 
 import (

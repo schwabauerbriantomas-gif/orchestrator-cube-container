@@ -327,7 +327,7 @@ func TestGetTemplateVolumes(t *testing.T) {
 		expectedResult  *types.Volume
 	}{
 		{
-			name:         "EmptyDir类型存在匹配",
+			name:         "EmptyDir type match found",
 			sourceVolume: &types.EmptyDirVolumeSource{Medium: 1},
 			templateVolumes: []*types.Volume{
 				{
@@ -345,7 +345,7 @@ func TestGetTemplateVolumes(t *testing.T) {
 			},
 		},
 		{
-			name:         "HostDirVolumeSources类型存在匹配",
+			name:         "HostDirVolumeSources type match found",
 			sourceVolume: &types.HostDirVolumeSources{},
 			templateVolumes: []*types.Volume{
 				{
@@ -363,13 +363,13 @@ func TestGetTemplateVolumes(t *testing.T) {
 			},
 		},
 		{
-			name:            "templateVolumes为空",
+			name:            "templateVolumes is empty",
 			sourceVolume:    &types.EmptyDirVolumeSource{Medium: 1},
 			templateVolumes: []*types.Volume{},
 			expectedResult:  nil,
 		},
 		{
-			name:         "templateVolume为nil",
+			name:         "templateVolume is nil",
 			sourceVolume: &types.EmptyDirVolumeSource{Medium: 1},
 			templateVolumes: []*types.Volume{
 				nil,
@@ -377,7 +377,7 @@ func TestGetTemplateVolumes(t *testing.T) {
 			expectedResult: nil,
 		},
 		{
-			name:         "templateVolume.VolumeSource为nil",
+			name:         "templateVolume.VolumeSource is nil",
 			sourceVolume: &types.EmptyDirVolumeSource{Medium: 1},
 			templateVolumes: []*types.Volume{
 				{
@@ -388,7 +388,7 @@ func TestGetTemplateVolumes(t *testing.T) {
 			expectedResult: nil,
 		},
 		{
-			name:         "没有匹配的类型",
+			name:         "no matching type found",
 			sourceVolume: &types.EmptyDirVolumeSource{Medium: 1},
 			templateVolumes: []*types.Volume{
 				{
@@ -404,7 +404,7 @@ func TestGetTemplateVolumes(t *testing.T) {
 			expectedResult: nil,
 		},
 		{
-			name:         "sourceVolume为nil",
+			name:         "sourceVolume is nil",
 			sourceVolume: nil,
 			templateVolumes: []*types.Volume{
 				{
@@ -417,7 +417,7 @@ func TestGetTemplateVolumes(t *testing.T) {
 			expectedResult: nil,
 		},
 		{
-			name: "遍历多个元素找到匹配",
+			name: "iterate multiple elements to find match",
 			sourceVolume: &types.SandboxPathVolumeSource{
 				Path: "/data",
 				Type: "Directory",

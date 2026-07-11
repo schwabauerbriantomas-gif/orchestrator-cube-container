@@ -96,7 +96,7 @@ func (l *local) Create(ctx context.Context, opts *workflow.CreateContext) error 
 	if err != nil {
 		return ret.Err(errorcode.ErrorCode_InvalidParamFormat, err.Error())
 	}
-	// 1.2.1 路径穿越防护：校验 SandboxID 不含路径穿越字符
+	// 1.2.1 path traversal protection: validate SandboxID does not contain path traversal characters
 	sandboxDir, err := utils.SafeJoinPath(filepath.Join(l.config.RootPath, namespace), opts.SandboxID)
 	if err != nil {
 		return ret.Errorf(errorcode.ErrorCode_InvalidParamFormat, "invalid sandboxID: %v", err)
@@ -140,7 +140,7 @@ func (l *local) Destroy(ctx context.Context, opts *workflow.DestroyContext) erro
 	if err != nil {
 		return ret.Err(errorcode.ErrorCode_InvalidParamFormat, err.Error())
 	}
-	// 1.2.1 路径穿越防护：校验 SandboxID 不含路径穿越字符
+	// 1.2.1 path traversal protection: validate SandboxID does not contain path traversal characters
 	sandboxDir, err := utils.SafeJoinPath(filepath.Join(l.config.RootPath, namespace), opts.SandboxID)
 	if err != nil {
 		return ret.Errorf(errorcode.ErrorCode_InvalidParamFormat, "invalid sandboxID: %v", err)

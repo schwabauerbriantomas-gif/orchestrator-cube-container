@@ -588,27 +588,27 @@ func TestProbeTimeoutMsDefault(t *testing.T) {
 		expectDefault  bool
 	}{
 		{
-			name:           "ProbeTimeoutMs为0时使用默认值",
+			name:           "ProbeTimeoutMs is 0 uses default value",
 			probeTimeoutMs: 0,
 			expectDefault:  true,
 		},
 		{
-			name:           "ProbeTimeoutMs为负数时使用默认值",
+			name:           "ProbeTimeoutMs is negative uses default value",
 			probeTimeoutMs: -1,
 			expectDefault:  true,
 		},
 		{
-			name:           "ProbeTimeoutMs为5时使用默认值",
+			name:           "ProbeTimeoutMs is 5 uses default value",
 			probeTimeoutMs: 5,
 			expectDefault:  true,
 		},
 		{
-			name:           "ProbeTimeoutMs为6时使用设定值",
+			name:           "ProbeTimeoutMs is 6 uses configured value",
 			probeTimeoutMs: 6,
 			expectDefault:  false,
 		},
 		{
-			name:           "ProbeTimeoutMs为正常值时使用设定值",
+			name:           "ProbeTimeoutMs is normal value uses configured value",
 			probeTimeoutMs: 200,
 			expectDefault:  false,
 		},
@@ -659,9 +659,9 @@ func TestProbeTimeoutMsDefault(t *testing.T) {
 			assert.Equal(t, errorcode.ErrorCode_Success, e.Code())
 
 			if tt.expectDefault {
-				assert.Equal(t, int32(100), cnt.Probe.ProbeTimeoutMs, "ProbeTimeoutMs应该被设置为默认值100")
+				assert.Equal(t, int32(100), cnt.Probe.ProbeTimeoutMs, "ProbeTimeoutMs should be set to default 100")
 			} else {
-				assert.Equal(t, tt.probeTimeoutMs, cnt.Probe.ProbeTimeoutMs, "ProbeTimeoutMs应该保持原值")
+				assert.Equal(t, tt.probeTimeoutMs, cnt.Probe.ProbeTimeoutMs, "ProbeTimeoutMs should keep original value")
 			}
 
 			metrics := createInfo.GetMetric()
@@ -727,7 +727,7 @@ func TestProbeTimeoutMsWithHttpProbe(t *testing.T) {
 	retErr := l.doProbe(ctx, cnt, ci)
 	e, _ := ret.FromError(retErr)
 	assert.Equal(t, errorcode.ErrorCode_Success, e.Code())
-	assert.Equal(t, int32(50), cnt.Probe.ProbeTimeoutMs, "ProbeTimeoutMs应该保持设定值50")
+	assert.Equal(t, int32(50), cnt.Probe.ProbeTimeoutMs, "ProbeTimeoutMs should keep configured value 50")
 	metrics := createInfo.GetMetric()
 	require.LessOrEqual(t, 1, len(metrics), "at least one metric")
 	assert.Nil(t, metrics[0].Error())
@@ -743,13 +743,13 @@ func TestProbeTimeoutMsWithPing(t *testing.T) {
 		expectDefault  bool
 	}{
 		{
-			name:           "Ping探测ProbeTimeoutMs为0时使用默认值",
+			name:           "ping probe ProbeTimeoutMs is 0 uses default value",
 			probeTimeoutMs: 0,
 			udp:            false,
 			expectDefault:  true,
 		},
 		{
-			name:           "Ping探测ProbeTimeoutMs为正常值",
+			name:           "ping probe ProbeTimeoutMs is normal value",
 			probeTimeoutMs: 150,
 			udp:            false,
 			expectDefault:  false,
@@ -801,9 +801,9 @@ func TestProbeTimeoutMsWithPing(t *testing.T) {
 			assert.Equal(t, errorcode.ErrorCode_Success, e.Code())
 
 			if tt.expectDefault {
-				assert.Equal(t, int32(100), cnt.Probe.ProbeTimeoutMs, "ProbeTimeoutMs应该被设置为默认值100")
+				assert.Equal(t, int32(100), cnt.Probe.ProbeTimeoutMs, "ProbeTimeoutMs should be set to default 100")
 			} else {
-				assert.Equal(t, tt.probeTimeoutMs, cnt.Probe.ProbeTimeoutMs, "ProbeTimeoutMs应该保持原值")
+				assert.Equal(t, tt.probeTimeoutMs, cnt.Probe.ProbeTimeoutMs, "ProbeTimeoutMs should keep original value")
 			}
 
 			metrics := createInfo.GetMetric()
@@ -820,7 +820,7 @@ func TestProbeTimeoutFailure(t *testing.T) {
 		expectedErrMsg string
 	}{
 		{
-			name: "TCP探测超时失败_端口不存在",
+			name: "TCP probe timeout failure - port not available",
 			setupProbe: func() *cubebox.ContainerConfig {
 				return &cubebox.ContainerConfig{
 					Probe: &cubebox.Probe{
@@ -841,7 +841,7 @@ func TestProbeTimeoutFailure(t *testing.T) {
 			expectedErrMsg: "connection refused",
 		},
 		{
-			name: "HTTP探测超时失败_端口不存在",
+			name: "HTTP probe timeout failure - port not available",
 			setupProbe: func() *cubebox.ContainerConfig {
 				return &cubebox.ContainerConfig{
 					Probe: &cubebox.Probe{
@@ -863,7 +863,7 @@ func TestProbeTimeoutFailure(t *testing.T) {
 			expectedErrMsg: "connection refused",
 		},
 		{
-			name: "探测超时_FailureThreshold达到上限",
+			name: "probe timeout - FailureThreshold reached",
 			setupProbe: func() *cubebox.ContainerConfig {
 				return &cubebox.ContainerConfig{
 					Probe: &cubebox.Probe{
@@ -1011,8 +1011,8 @@ func TestProbeConcurrent(t *testing.T) {
 	}
 
 	successRate := float64(successCount) / float64(concurrentCount)
-	assert.GreaterOrEqual(t, successRate, 0.9, "并发探测成功率应该大于等于90%%")
-	t.Logf("并发探测测试完成: 总数=%d, 成功=%d, 成功率=%.2f%%",
+	assert.GreaterOrEqual(t, successRate, 0.9, "concurrent probe success rate should be >= 90%%")
+	t.Logf("concurrent probe test completed: total=%d, success=%d, success rate=%.2f%%",
 		concurrentCount, successCount, successRate*100)
 }
 
@@ -1139,7 +1139,7 @@ func TestProbeConcurrentMixed(t *testing.T) {
 	}
 
 	successRate := float64(successCount) / float64(concurrentCount)
-	assert.GreaterOrEqual(t, successRate, 0.8, "混合并发探测成功率应该大于等于80%%")
-	t.Logf("混合并发探测测试完成: 总数=%d, 成功=%d, 失败=%d, 成功率=%.2f%%",
+	assert.GreaterOrEqual(t, successRate, 0.8, "mixed concurrent probe success rate should be >= 80%%")
+	t.Logf("mixed concurrent probe test completed: total=%d, success=%d, failed=%d, success rate=%.2f%%",
 		concurrentCount, successCount, failCount, successRate*100)
 }

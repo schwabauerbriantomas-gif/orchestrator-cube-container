@@ -78,7 +78,7 @@ func GetRedisConnPoolWrap(caller string, redisConf *config.RedisConf) *RedisWrap
 				}
 				_, err := c.Do("PING")
 				if err != nil {
-					CubeLog.Fatalf("redis ping 失败:%s", err)
+					CubeLog.Fatalf("redis ping failed: %s", err)
 				}
 				return err
 			},
@@ -120,7 +120,7 @@ func (r *RedisWrap) Dial() (c redis.Conn, err error) {
 		}
 		return c, nil
 	}
-	return nil, errors.New("redis连接失败")
+	return nil, errors.New("redis connection failed")
 }
 
 func (r *RedisWrap) reportMetric() {
@@ -157,14 +157,14 @@ func (r *RedisWrap) reportMetric() {
 }
 
 func newConn(serviceName string, passwd string, db int) (redis.Conn, error) {
-	CubeLog.Debugf("redis连接地址:%s", serviceName)
+	CubeLog.Debugf("redis connection address: %s", serviceName)
 	c, err := redis.Dial("tcp", serviceName,
 		redis.DialConnectTimeout(5*time.Second),
 		redis.DialReadTimeout(5*time.Second),
 		redis.DialDatabase(db),
 		redis.DialPassword(passwd))
 	if err != nil {
-		CubeLog.Fatalf("连接redis:%s 失败:%s", serviceName, err)
+		CubeLog.Fatalf("connect to redis %s failed: %s", serviceName, err)
 		return c, err
 	}
 	return c, err

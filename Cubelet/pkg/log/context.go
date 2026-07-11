@@ -2,34 +2,34 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-// Package log 提供统一的日志包装和上下文管理
+// Package log provides unified log wrapping and context management.
 //
-// 核心功能：
-// 1. CubeWrapperLogEntry - 对 CubeLog.Entry 的包装，提供便利的日志方法
-// 2. Context 集成 - 支持通过 context 传递和获取 logger 实例
-// 3. 日志桥接 - 将 klog、logrus、containerd log 统一到 CubeLog
+// Core features:
+// 1. CubeWrapperLogEntry - a wrapper around CubeLog.Entry providing convenient logging methods
+// 2. Context integration - supports passing and retrieving logger instances via context
+// 3. Log bridging - unifies klog, logrus, and containerd log into CubeLog
 //
-// 使用示例：
+// Usage example:
 //
-//	// 获取当前上下文的 logger
+//	// Get the logger for the current context
 //	logger := log.GetLogger(ctx)
 //	logger.WithField("request_id", "123").Info("message")
 //
-//	// 创建新的上下文并关联 logger
+//	// Create a new context and associate a logger with it
 //	newCtx := log.WithLogger(ctx, logger)
-//	// 新上下文中的日志都会使用这个 logger
+//	// All logging in the new context will use this logger
 //
-// 日志链路：
+// Logging pipeline:
 //
-//	业务代码 (CubeLog.Entry)
+//	Business code (CubeLog.Entry)
 //	    ↓
-//	CubeWrapperLogEntry (本包)
+//	CubeWrapperLogEntry (this package)
 //	    ↓
-//	context 传递与关联
+//	context passing and association
 //	    ↓
-//	klog/logrus/containerd log 桥接
+//	klog/logrus/containerd log bridging
 //	    ↓
-//	日志文件输出
+//	log file output
 package log
 
 import (

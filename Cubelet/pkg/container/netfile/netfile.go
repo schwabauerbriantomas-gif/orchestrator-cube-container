@@ -291,7 +291,7 @@ func defaultDNSServers() []string {
 }
 
 func Clean(ctx context.Context, containerID string) error {
-	// 1.2.1 路径穿越防护：校验 containerID 不含路径穿越字符
+	// 1.2.1 path traversal protection: validate containerID does not contain path traversal characters
 	dir, err := utils.SafeJoinPath(oldNetfilePath, containerID)
 	if err != nil {
 		return fmt.Errorf("Clean netfile: %w", err)

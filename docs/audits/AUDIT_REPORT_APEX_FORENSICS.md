@@ -629,7 +629,7 @@ El README dice 121 tools. El badge del README dice 129. El código tiene ~121 to
 | CI/CD | 4/10 | CI existe pero security scans non-blocking, binary-guard incompleto |
 | Contributing | 5/10 | CONTRIBUTING.md existe pero desactualizado (34 tools vs 121) |
 | Reproducibility | 2/10 | Binarios ELF commiteados imposibilitan reproducir builds |
-| Community | N/A | Fork nuevo, sin社区 todavía |
+| Community | N/A | New fork, no community yet |
 
 ---
 

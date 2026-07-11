@@ -4,5 +4,5 @@ source:
   #test_source:
   #  filepath_regex: [".*/.*_test.go", ".*/examples/.*", ".*/test/.*"]
   auto_generate_source:
-    # 自动生成代码文件的正则表达式，若无统一标识格式，可以指定具体目录，样例可参考test_source举例
+    # Regex for auto-generated code files
     filepath_regex: [".*/.*.pb.go",".*/graceTars/.*",".*/.*_test.go", ".*/examples/.*", "/test/.*", "demo/"]

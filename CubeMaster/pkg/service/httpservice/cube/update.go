@@ -28,7 +28,7 @@ func handleUpdateAction(w http.ResponseWriter, r *http.Request, rt *CubeLog.Requ
 	req := &types.UpdateRequest{}
 	if err := utils.DecodeHttpBody(r.Body, req); err != nil {
 		rsp.Ret.RetCode = int(errorcode.ErrorCode_MasterParamsError)
-		rsp.Ret.RetMsg = "请求体解析失败"
+		rsp.Ret.RetMsg = "failed to parse request body"
 		return rsp
 	}
 	if req.RequestID == "" {

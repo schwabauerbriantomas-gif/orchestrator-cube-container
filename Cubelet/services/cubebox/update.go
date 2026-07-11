@@ -241,7 +241,7 @@ func (s *service) UpdateWithResume(ctx context.Context, req *cubebox.UpdateCubeS
 	log.G(ctx).Infof("UpdateWithResume:%s", utils.InterfaceToString(req))
 	ctx = addPauseResumeMetaData(ctx, req)
 
-	// 保证无论是否 panic，状态都会落盘
+	// Ensure state is persisted to disk even in case of panic
 	defer func() {
 		s.cubeboxMgr.cubeboxManger.SyncByID(ctx, sb.ID)
 	}()

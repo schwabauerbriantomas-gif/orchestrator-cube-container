@@ -53,7 +53,6 @@ BINARIES := \
 	cubelet \
 	cubemaster \
 	cubevsmapdump \
-	network-agent \
 	shim \
 	#
 
@@ -87,14 +86,13 @@ help:
 	@printf "  cubecow-sdk   Build cubecow static library for Cubelet\n"
 	@printf "  cubecow-smoke Build cubecow smoke test CLI in Docker\n"
 	@printf "  cubecow-test-native Build SDK artifacts and run native tests in Docker\n"
-	@printf "  network-agent Build network-agent in Docker\n"
 	@printf "  cube-proxy-sidecar Build cube-proxy-sidecar (developer-only; not in 'all')\n"
 	@printf "  agent         Build cube-agent in Docker\n"
 	@printf "  cubeapi       Build CubeAPI (cube-api) in Docker\n"
 	@printf "  cube-api      Alias of cubeapi\n"
 	@printf "  shim          Build containerd-shim-cube-rs and cube-runtime in Docker\n"
 	@printf "  guest-kernel  Build guest kernel vmlinux/Image (KERNEL_SRC=...; native or cross x86_64<->aarch64)\n"
-	@printf "  all           Build cubemaster, cubelet, network-agent and cubevsmapdump in Docker\n"
+	@printf "  all           Build cubemaster, cubelet and cubevsmapdump in Docker\n"
 	@printf "  manual-release Build binaries and package manual update tarball\n"
 	@printf "  clean-rust-target-dirs Remove target/ in every top-level Rust project\n"
 	@printf "  web-install   Install WebUI npm dependencies\n"
@@ -222,11 +220,6 @@ cubevsmapdump: builder-image
 	@mkdir -p "$(OUTPUT_DIR)"
 	$(MAKE) builder-run BUILDER_CMD='mkdir -p /workspace/_output/bin && cd /workspace/CubeNet/cubevs && make gen && go build -o /workspace/_output/bin/cubevsmapdump ./cmd/cubevsmapdump'
 
-.PHONY: network-agent
-network-agent: builder-image
-	@mkdir -p "$(OUTPUT_DIR)"
-	$(MAKE) builder-run BUILDER_CMD='mkdir -p /workspace/_output/bin && cd /workspace/CubeNet && make -C cubevs gen && cd /workspace/network-agent && make proto && make build && cp bin/network-agent /workspace/_output/bin/network-agent'
-
 .PHONY: cube-proxy-sidecar
 cube-proxy-sidecar: builder-image
 	@mkdir -p "$(OUTPUT_DIR)"
@@ -274,7 +267,7 @@ manual-release: all
 	@mkdir -p "$(RELEASE_DIR)"
 	@PKG_TS="$$(date +%Y%m%d-%H%M%S)"; \
 	PKG_NAME="cube-manual-update-$${PKG_TS}.tar.gz"; \
-	tar -C "$(OUTPUT_DIR)" -czf "$(RELEASE_DIR)/$${PKG_NAME}" cubemaster cubemastercli cubelet cubecli network-agent cubevsmapdump; \
+	tar -C "$(OUTPUT_DIR)" -czf "$(RELEASE_DIR)/$${PKG_NAME}" cubemaster cubemastercli cubelet cubecli cubevsmapdump; \
 	sha256sum "$(RELEASE_DIR)/$${PKG_NAME}" > "$(RELEASE_DIR)/$${PKG_NAME}.sha256"; \
 	install -m 0755 "$(MANUAL_DEPLOY_SCRIPT)" "$(RELEASE_DIR)/deploy-manual.sh"; \
 	printf 'Manual release ready:\n  %s\n  %s\n  %s\n' \
@@ -327,8 +320,3 @@ fmt:
 	@printf '  %-8s %s\n' "FMT" "CubeMaster"
 	@$(MAKE) -C CubeMaster fmt
 	@printf '  %-8s %s\n' "FMT" "CubeShim"
-	@$(MAKE) -C CubeShim fmt
-	@printf '  %-8s %s\n' "FMT" "hypervisor"
-	@$(MAKE) -C hypervisor fmt
-	@printf '  %-8s %s\n' "FMT" "network-agent"
-	@$(MAKE) -C network-agent fmt

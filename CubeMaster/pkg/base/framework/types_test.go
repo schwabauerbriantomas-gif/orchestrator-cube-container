@@ -32,13 +32,13 @@ func TestImageStateSummary_ConcurrentNodesAccess(t *testing.T) {
 				iss.AddNode(nodeName)
 
 				if !iss.HasNode(nodeName) {
-					t.Errorf("节点 %s 应该存在但未找到", nodeName)
+					t.Errorf("node %s should exist but was not found", nodeName)
 				}
 
 				iss.RemoveNode(nodeName)
 
 				if iss.HasNode(nodeName) {
-					t.Errorf("节点 %s 应该被删除但仍然存在", nodeName)
+					t.Errorf("node %s should have been removed but still exists", nodeName)
 				}
 			}
 		}(i)
@@ -47,7 +47,7 @@ func TestImageStateSummary_ConcurrentNodesAccess(t *testing.T) {
 	wg.Wait()
 
 	if iss.GetNumNodes() != 0 {
-		t.Errorf("最终Nodes集合应该为空，但实际有 %d 个元素", iss.GetNumNodes())
+		t.Errorf("final Nodes set should be empty, but has %d elements", iss.GetNumNodes())
 	}
 }
 
@@ -94,7 +94,7 @@ func TestImageStateSummary_ConcurrentReadWrite(t *testing.T) {
 
 				length := iss.GetNumNodes()
 				if length < 0 {
-					t.Errorf("Nodes长度不能为负数: %d", length)
+					t.Errorf("Nodes length must not be negative: %d", length)
 				}
 
 				if j < numNodes {
@@ -107,7 +107,7 @@ func TestImageStateSummary_ConcurrentReadWrite(t *testing.T) {
 
 	wg.Wait()
 
-	t.Logf("并发读写测试完成，最终Nodes数量: %d", iss.GetNumNodes())
+	t.Logf("concurrent read-write test completed, final Nodes count: %d", iss.GetNumNodes())
 }
 
 func TestImageStateSummary_SnapshotConcurrency(t *testing.T) {
@@ -135,10 +135,10 @@ func TestImageStateSummary_SnapshotConcurrency(t *testing.T) {
 	expectedNumNodes := iss.GetNumNodes()
 	for i, snapshot := range snapshots {
 		if snapshot.NumNodes != expectedNumNodes {
-			t.Errorf("快照 %d 的NumNodes不正确: 期望 %d, 实际 %d", i, expectedNumNodes, snapshot.NumNodes)
+			t.Errorf("snapshot %d NumNodes mismatch: expected %d, got %d", i, expectedNumNodes, snapshot.NumNodes)
 		}
 		if snapshot.Size != iss.Size {
-			t.Errorf("快照 %d 的Size不正确: 期望 %d, 实际 %d", i, iss.Size, snapshot.Size)
+			t.Errorf("snapshot %d Size mismatch: expected %d, got %d", i, iss.Size, snapshot.Size)
 		}
 	}
 }

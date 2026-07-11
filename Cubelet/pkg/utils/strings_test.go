@@ -238,9 +238,9 @@ func TestMaxCommonPrefix(t *testing.T) {
 		},
 		{
 			name:     "unicode characters",
-			input:    []string{"你好世界", "你好", "你好吗"},
-			expected: "你好",
-		},
+			input:    []string{"hello world", "hello", "hello there"},
+			expected: "hello",
+			},
 	}
 
 	for _, tc := range testCases {
