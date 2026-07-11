@@ -43,12 +43,10 @@ KERNEL_CROSS_COMPILE ?=
 RUST_PROJECT_DIRS := \
 	$(ROOT_DIR)/CubeAPI \
 	$(ROOT_DIR)/CubeShim \
-	$(ROOT_DIR)/agent \
 	$(ROOT_DIR)/cubecow \
 	$(ROOT_DIR)/hypervisor
 
 BINARIES := \
-	agent \
 	cubeapi \
 	cubelet \
 	cubemaster \
@@ -87,7 +85,6 @@ help:
 	@printf "  cubecow-smoke Build cubecow smoke test CLI in Docker\n"
 	@printf "  cubecow-test-native Build SDK artifacts and run native tests in Docker\n"
 	@printf "  cube-proxy-sidecar Build cube-proxy-sidecar (developer-only; not in 'all')\n"
-	@printf "  agent         Build cube-agent in Docker\n"
 	@printf "  cubeapi       Build CubeAPI (cube-api) in Docker\n"
 	@printf "  cube-api      Alias of cubeapi\n"
 	@printf "  shim          Build containerd-shim-cube-rs and cube-runtime in Docker\n"
@@ -225,11 +222,6 @@ cube-proxy-sidecar: builder-image
 	@mkdir -p "$(OUTPUT_DIR)"
 	$(MAKE) builder-run BUILDER_CMD="mkdir -p /workspace/_output/bin && cd /workspace/CubeProxy/sidecar && go mod download && CGO_ENABLED=0 GOOS=linux GOARCH=$$(go env GOARCH) go build -trimpath -tags 'netgo osusergo' -ldflags '-s -w' -o /workspace/_output/bin/cube-proxy-sidecar ./cmd/sidecar"
 
-.PHONY: agent
-agent: builder-image
-	@mkdir -p "$(OUTPUT_DIR)"
-	$(MAKE) builder-run BUILDER_CMD='mkdir -p /workspace/_output/bin && cd /workspace/agent && make -j1 &&  make BINDIR=/workspace/_output/bin install'
-
 .PHONY: cubeapi
 cubeapi: builder-image
 	@mkdir -p "$(OUTPUT_DIR)"
@@ -307,8 +299,6 @@ web-sync-dev-env:
 # Components without formattable code (e.g. CubeProxy) are skipped.
 .PHONY: fmt
 fmt:
-	@printf '  %-8s %s\n' "FMT" "agent"
-	@$(MAKE) -C agent fmt
 	@printf '  %-8s %s\n' "FMT" "cubecow"
 	@$(MAKE) -C cubecow fmt
 	@printf '  %-8s %s\n' "FMT" "CubeAPI"
