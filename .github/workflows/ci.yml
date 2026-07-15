@@ -126,7 +126,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Gosec (Go SAST)
-        uses: securego/gosec@e6a9a23fb9c8f994847df904f752083732598f49 # v2.22.5
+        uses: securego/gosec@d2d3ae66bd8d340b78b5142b6fe610691783c2fe # v2.22.5
         with:
           # -no-fail: gosec v2.22.x has an SSA analyzer panic bug on the
           # main package. -no-fail lets the SARIF still generate despite
