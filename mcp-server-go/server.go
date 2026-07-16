@@ -245,7 +245,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "[cube-mcp] error: %v\n", err)
 			os.Exit(1)
 		}
-		ln = &maxConnsListener{Listener: ln, limit: maxConnsPerIP}
+		ln = &maxConnsListener{Listener: ln, limit: maxConnsPerIP, connPool: make(map[string]int)}
 
 		httpServer := &http.Server{
 			Addr:              addr,
