@@ -34,14 +34,21 @@ jobs:
           cd mcp-server-go
           sha256sum cube-mcp-linux-amd64 cube-mcp-linux-arm64 > checksums.txt
 
-      - name: Upload release assets
+      - name: Delete existing release if present
+        continue-on-error: true
+        run: |
+          gh release delete "${{ github.ref_name }}" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release with assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
             mcp-server-go/cube-mcp-linux-amd64
             mcp-server-go/cube-mcp-linux-arm64
             mcp-server-go/checksums.txt
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
           draft: false
           prerelease: ${{ contains(github.ref, 'beta') }}
           fail_on_unmatched_files: false
