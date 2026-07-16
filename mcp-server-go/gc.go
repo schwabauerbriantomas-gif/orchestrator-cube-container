@@ -88,22 +88,32 @@ func (g *GarbageCollector) PruneImages() (*PruneResult, error) {
 	}
 
 	ageFilter := fmt.Sprintf("until=%dh", g.minAgeHours)
-	cmd := exec.Command("docker", "image", "prune", "-af", "--filter", ageFilter, "--format", "{{.Size}}")
-	output, err := cmd.Output()
+	// Note: 'docker image prune' does NOT support --format (unlike 'docker image ls').
+	// Using --format causes "unknown flag: --format" exit 125.
+	cmd := exec.Command("docker", "image", "prune", "-af", "--filter", ageFilter)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("docker image prune: %w", err)
+		return nil, fmt.Errorf("docker image prune: %w (output: %s)", err, string(output))
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	// Parse "Total reclaimed space: XYZ" from output
+	outStr := strings.TrimSpace(string(output))
 	result := &PruneResult{
-		Type:        "images",
-		ItemsRemoved: len(lines),
-		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Type:      "images",
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
-	if len(lines) > 0 && lines[0] != "" {
-		// Sum is approximate — docker reports per-image reclaimed space
-		result.Reclaimed = strings.TrimSpace(string(output))
+	// Count "deleted" lines and extract reclaimed space
+	lines := strings.Split(outStr, "\n")
+	deletedCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, "deleted:") || strings.Contains(line, "Deleted") {
+			deletedCount++
+		}
+		if strings.Contains(line, "Total reclaimed space:") {
+			result.Reclaimed = strings.TrimSpace(line)
+		}
 	}
+	result.ItemsRemoved = deletedCount
 
 	fmt.Fprintf(os.Stderr, "[cube-mcp] GC: pruned %d images\n", result.ItemsRemoved)
 	return result, nil
@@ -116,11 +126,11 @@ func (g *GarbageCollector) PruneVolumes() (*PruneResult, error) {
 		return nil, fmt.Errorf("docker CLI not available")
 	}
 
-	// First: prune Docker's own orphaned volumes (M7: add age filter to avoid
-	// deleting recently created volumes that belong to stopped containers
-	// that may restart). Use --filter until=<timestamp> to only remove volumes
-	// not used for at least 1 hour.
-	cmd := exec.Command("docker", "volume", "prune", "-f", "--filter", "until=1h")
+	// First: prune Docker's own orphaned volumes.
+	// Note: 'until' filter is NOT supported by 'docker volume prune' (only
+	// 'docker image prune' and 'docker container prune' support it). Using
+	// it causes "invalid filter 'until'" error on all Docker versions.
+	cmd := exec.Command("docker", "volume", "prune", "-f")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("docker volume prune: %w", err)

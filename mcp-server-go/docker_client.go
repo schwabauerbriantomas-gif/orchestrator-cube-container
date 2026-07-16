@@ -503,7 +503,21 @@ func (c *DockerClient) CreateSandbox(templateID string, memoryMB int, cpuCount f
 		createBody["Env"] = env
 	}
 	if len(metadata) > 0 {
-		createBody["Labels"] = metadata
+		// Docker Labels must be map[string]string. The metadata map may
+		// contain non-string values (e.g. []string for "files"), which
+		// causes "cannot unmarshal array into Labels of type string".
+		// Convert all values to strings, and skip empty values.
+		labels := make(map[string]string)
+		for k, v := range metadata {
+			if s, ok := v.(string); ok {
+				labels[k] = s
+			} else if v != nil {
+				labels[k] = fmt.Sprintf("%v", v)
+			}
+		}
+		if len(labels) > 0 {
+			createBody["Labels"] = labels
+		}
 	}
 
 	hostConfig := map[string]interface{}{}
