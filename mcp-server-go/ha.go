@@ -22,6 +22,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -520,12 +521,23 @@ func (m *HAManager) dispatchHeartbeats() {
 	client := &http.Client{
 		Timeout: m.heartbeatInterval,
 	}
-	// When TLS is enabled, accept the self-signed cert (homelab mode).
-	// In production, a CA-signed cert should be used and this skipped.
+	// When TLS is enabled, verify peer cert against the internal CA.
+	// The CA cert path is configured via CUBE_TLS_CA (defaults to ca.crt alongside the cert).
 	if os.Getenv("CUBE_TLS_CERT") != "" {
+		caPath := os.Getenv("CUBE_TLS_CA")
+		if caPath == "" {
+			// Default: ca.crt next to the cert file
+			caPath = "/etc/cube-container/tls/ca.crt"
+		}
+		caPool := x509.NewCertPool()
+		caLoaded := false
+		if caCert, err := os.ReadFile(caPath); err == nil {
+			caLoaded = caPool.AppendCertsFromPEM(caCert)
+		}
 		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, // #nosec G402 — homelab self-signed; production uses CA certs
+				RootCAs:            caPool,
+				InsecureSkipVerify: !caLoaded, // Only skip if no CA loaded
 			},
 		}
 	}
