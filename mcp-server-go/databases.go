@@ -236,7 +236,12 @@ func (dm *DatabaseManager) Create(params DatabaseCreateParams) (*DatabaseInstanc
 		return nil, fmt.Errorf("failed to create template: %w", err)
 	}
 	templateMap, _ := templateResp.(map[string]interface{})
-	templateID, _ := templateMap["id"].(string)
+	// CreateTemplateFromImage returns "templateID" in Docker backend and "id"
+	// in Cube backend. Try both for compatibility.
+	templateID, _ := templateMap["templateID"].(string)
+	if templateID == "" {
+		templateID, _ = templateMap["id"].(string)
+	}
 
 	// Create the container
 	containerResp, err := client.CreateSandbox(templateID, params.MemoryMB, 1.0, nil, map[string]interface{}{
@@ -247,7 +252,11 @@ func (dm *DatabaseManager) Create(params DatabaseCreateParams) (*DatabaseInstanc
 		return nil, fmt.Errorf("failed to create database container: %w", err)
 	}
 	container, _ := containerResp.(map[string]interface{})
-	containerID, _ := container["id"].(string)
+	// CreateSandbox returns "sandboxID" in Docker backend. Try both fields.
+	containerID, _ := container["sandboxID"].(string)
+	if containerID == "" {
+		containerID, _ = container["id"].(string)
+	}
 
 	// Attach the volume — H10 fix: use per-type mount path
 	if volumeMgr != nil && containerID != "" {
