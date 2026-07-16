@@ -11,6 +11,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
@@ -135,6 +136,9 @@ func main() {
 
 	// HA manager (active-passive CubeMaster failover)
 	haManager = newHAManager()
+	if haManager != nil {
+		haManager.Start(context.Background())
+	}
 
 	// Start health watcher (auto-restart failed containers)
 	if healthMgr != nil {
