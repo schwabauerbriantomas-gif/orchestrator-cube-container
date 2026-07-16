@@ -246,9 +246,10 @@ func (im *ImageManager) BuildImage(ctx context.Context, contextDir, dockerfile, 
 		q.Set("t", tag)
 	}
 
-	// POST /build
+	// POST /build — use the same URL pattern as dockerRequest:
+	// "http://docker/" + APIVersion + path (APIVersion already includes "v" prefix)
 	body := bytes.NewReader(tarBuf.Bytes())
-	reqURL := fmt.Sprintf("http://docker/v%s/build?%s", dc.APIVersion, q.Encode())
+	reqURL := fmt.Sprintf("http://docker/%s/build?%s", dc.APIVersion, q.Encode())
 	req, err := http.NewRequestWithContext(ctx, "POST", reqURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create build request: %w", err)
@@ -327,7 +328,7 @@ func (im *ImageManager) PushImage(ctx context.Context, tag, registry string) (*I
 	_, _, _ = dc.dockerPost(ctx, fmt.Sprintf("/images/%s/tag?repo=%s", url.PathEscape(tag), url.PathEscape(fullRef)), nil, nil)
 
 	// POST /images/{name}/push
-	pushURL := fmt.Sprintf("http://docker/v%s/images/%s/push", dc.APIVersion, url.PathEscape(fullRef))
+	pushURL := fmt.Sprintf("http://docker/%s/images/%s/push", dc.APIVersion, url.PathEscape(fullRef))
 	req, err := http.NewRequestWithContext(ctx, "POST", pushURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create push request: %w", err)
@@ -388,7 +389,7 @@ func (im *ImageManager) PullImage(ctx context.Context, tag string) (*ImagePullRe
 		return nil, fmt.Errorf("image_pull is only supported with the Docker backend (current: %s)", im.backend.BackendName())
 	}
 
-	pullURL := fmt.Sprintf("http://docker/v%s/images/create?fromImage=%s", dc.APIVersion, url.QueryEscape(tag))
+	pullURL := fmt.Sprintf("http://docker/%s/images/create?fromImage=%s", dc.APIVersion, url.QueryEscape(tag))
 	req, err := http.NewRequestWithContext(ctx, "POST", pullURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pull request: %w", err)
