@@ -905,7 +905,7 @@ func (c *DockerClient) ExecInSandbox(sandboxID, command string, timeout int) (in
 	// 3. Best-effort inspect for the exit code (non-fatal if it fails).
 	exitCode := 0
 	if ins, err := c.dockerGet(ctx, "/exec/"+execResp.ID+"/json", nil); err == nil {
-		exitCode = toInt(mapGet(asMap(ins), "ExitCode"))
+		exitCode = toInt(mapGetAny(asMap(ins), "ExitCode"))
 	}
 
 	return map[string]interface{}{

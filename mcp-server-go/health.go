@@ -473,7 +473,7 @@ func (hm *HealthManager) runExecProbe(hc *HealthCheck) (bool, error) {
 	}
 
 	m := asMap(result)
-	exitCode := toInt(mapGet(m, "exitCode"))
+	exitCode := toInt(mapGetAny(m, "exitCode"))
 	if exitCode == 0 {
 		return true, nil
 	}
