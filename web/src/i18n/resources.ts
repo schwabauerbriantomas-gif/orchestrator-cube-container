@@ -24,29 +24,6 @@ import enStore from '@/locales/en/store.json';
 import enAgentHub from '@/locales/en/agentHub.json';
 import enAuth from '@/locales/en/auth.json';
 
-import zhCommon from '@/locales/zh/common.json';
-import zhNav from '@/locales/zh/nav.json';
-import zhTopbar from '@/locales/zh/topbar.json';
-import zhCommand from '@/locales/zh/command.json';
-import zhOverview from '@/locales/zh/overview.json';
-import zhSandboxes from '@/locales/zh/sandboxes.json';
-import zhSandboxDetail from '@/locales/zh/sandboxDetail.json';
-import zhTemplates from '@/locales/zh/templates.json';
-import zhTemplateDetail from '@/locales/zh/templateDetail.json';
-import zhNodes from '@/locales/zh/nodes.json';
-import zhNodeDetail from '@/locales/zh/nodeDetail.json';
-import zhVersions from '@/locales/zh/versions.json';
-import zhNetwork from '@/locales/zh/network.json';
-import zhKeys from '@/locales/zh/keys.json';
-import zhPlaceholder from '@/locales/zh/placeholder.json';
-import zhSandboxNew from '@/locales/zh/sandboxNew.json';
-import zhTheme from '@/locales/zh/theme.json';
-import zhSettings from '@/locales/zh/settings.json';
-import zhObservability from '@/locales/zh/observability.json';
-import zhStore from '@/locales/zh/store.json';
-import zhAgentHub from '@/locales/zh/agentHub.json';
-import zhAuth from '@/locales/zh/auth.json';
-
 export const resources = {
   en: {
     common: enCommon,
@@ -71,30 +48,6 @@ export const resources = {
     store: enStore,
     agentHub: enAgentHub,
     auth: enAuth,
-  },
-  zh: {
-    common: zhCommon,
-    nav: zhNav,
-    topbar: zhTopbar,
-    command: zhCommand,
-    overview: zhOverview,
-    sandboxes: zhSandboxes,
-    sandboxDetail: zhSandboxDetail,
-    templates: zhTemplates,
-    templateDetail: zhTemplateDetail,
-    nodes: zhNodes,
-    nodeDetail: zhNodeDetail,
-    versions: zhVersions,
-    network: zhNetwork,
-    keys: zhKeys,
-    placeholder: zhPlaceholder,
-    sandboxNew: zhSandboxNew,
-    theme: zhTheme,
-    settings: zhSettings,
-    observability: zhObservability,
-    store: zhStore,
-    agentHub: zhAgentHub,
-    auth: zhAuth,
   },
 } as const;
 

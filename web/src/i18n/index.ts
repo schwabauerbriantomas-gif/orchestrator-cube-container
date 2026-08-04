@@ -15,7 +15,7 @@ i18n
     resources,
     ...(forcedLanguage ? { lng: forcedLanguage } : {}),
     fallbackLng: 'en',
-    supportedLngs: ['en', 'zh'],
+    supportedLngs: ['en'],
     defaultNS: 'common',
     ns: ['common', 'nav', 'topbar', 'command', 'overview', 'sandboxes', 'sandboxDetail', 'sandboxNew', 'templates', 'templateDetail', 'nodes', 'nodeDetail', 'network', 'keys', 'placeholder', 'settings', 'observability', 'store', 'agentHub', 'auth'],
     interpolation: {
@@ -25,7 +25,7 @@ i18n
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],
       lookupLocalStorage: 'cube.lang',
-      convertDetectedLanguage: (lng) => (lng.startsWith('zh') ? 'zh' : 'en'),
+      convertDetectedLanguage: (lng) => 'en',
     },
   });
 
