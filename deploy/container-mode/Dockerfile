@@ -28,7 +28,7 @@
 # to the host daemon via a read-only socket instead of mounting it RW.
 
 # ---- Stage 1: Build Go components ----
-FROM golang:1.25.12@sha256:d7912cedddfa15b2900a8dfb7187df0af5ec2cb424a371139b5b352fd3e6b740 AS go-builder
+FROM golang:1.26.4@sha256:f96cc555eb8db430159a3aa6797cd5bae561945b7b0fe7d0e284c63a3b291609 AS go-builder
 
 WORKDIR /workspace
 
@@ -52,7 +52,7 @@ COPY CubeAPI/ ./CubeAPI/
 RUN cd CubeAPI && cargo build --release && cp target/release/cube-api /cubeapi
 
 # ---- Stage 3: Build MCP server (Go) ----
-FROM golang:1.25.12@sha256:d7912cedddfa15b2900a8dfb7187df0af5ec2cb424a371139b5b352fd3e6b740 AS mcp-builder
+FROM golang:1.26.4@sha256:f96cc555eb8db430159a3aa6797cd5bae561945b7b0fe7d0e284c63a3b291609 AS mcp-builder
 
 WORKDIR /workspace
 COPY mcp-server-go/ ./mcp-server-go/
