@@ -59,7 +59,7 @@ COPY mcp-server-go/ ./mcp-server-go/
 RUN cd mcp-server-go && CGO_ENABLED=0 go build -o /cube-mcp .
 
 # ---- Stage 4: Runtime ----
-FROM ubuntu:22.04@sha256:0e0a0fc6d18feda9db1590da249ac93e8d5abfea8f4c3c0c849ce512b5ef8982
+FROM ubuntu:25.10@sha256:7cc5e35f6567ee8c66d2abb4aab0fd866669e6207c237c3a8f0947a5c7f17092
 
 # Install tini for proper PID 1 signal handling + zombie reaping.
 # Without tini, containerd child processes become zombies and signal
